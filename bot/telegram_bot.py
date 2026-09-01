@@ -239,17 +239,28 @@ class FengShuiTelegramBot:
             logger.warning("Telegram Bot Token is not configured or python-telegram-bot is missing. Skipping bot run.")
             return
 
-        logger.info("Starting Telegram Bot Application...")
-        app = Application.builder().token(self.token).build()
+        try:
+            import asyncio
+            try:
+                loop = asyncio.get_event_loop()
+            except RuntimeError:
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
 
-        app.add_handler(CommandHandler("start", self.start_command))
-        app.add_handler(CommandHandler("help", self.help_command))
-        app.add_handler(CommandHandler("gua", self.gua_command))
-        app.add_handler(CommandHandler("flyingstars", self.flyingstars_command))
-        app.add_handler(CommandHandler("bazi", self.bazi_command))
-        app.add_handler(CommandHandler("predict", self.predict_command))
-        app.add_handler(CommandHandler("ask", self.handle_message))
-        app.add_handler(CallbackQueryHandler(self.button_callback))
-        app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, self.handle_message))
+            logger.info("Starting Telegram Bot Application...")
+            app = Application.builder().token(self.token).build()
 
-        app.run_polling()
+            app.add_handler(CommandHandler("start", self.start_command))
+            app.add_handler(CommandHandler("help", self.help_command))
+            app.add_handler(CommandHandler("gua", self.gua_command))
+            app.add_handler(CommandHandler("flyingstars", self.flyingstars_command))
+            app.add_handler(CommandHandler("bazi", self.bazi_command))
+            app.add_handler(CommandHandler("predict", self.predict_command))
+            app.add_handler(CommandHandler("ask", self.handle_message))
+            app.add_handler(CallbackQueryHandler(self.button_callback))
+            app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, self.handle_message))
+
+            logger.info("Telegram Bot polling started successfully.")
+            app.run_polling(stop_signals=None, close_loop=False)
+        except Exception as e:
+            logger.error(f"Telegram Bot error: {e}", exc_info=True)
