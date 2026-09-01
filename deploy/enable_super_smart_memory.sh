@@ -50,10 +50,7 @@ echo "✓ zRAM active with LZ4 Compression and Priority 100."
 
 # Step 3: Apply Super Smart Kernel Memory Tuning (sysctl)
 echo "[3/4] Tuning Kernel Virtual Memory Subsystem (sysctl)..."
-sed -i '/SUPREME FENG SHUI MEMORY OPTIMIZATION/,$d' /etc/sysctl.conf
-
-cat << 'SYSCTL_CONF' >> /etc/sysctl.conf
-
+cat << 'SYSCTL_CONF' > /etc/sysctl.d/99-fengshui.conf
 # === SUPREME FENG SHUI MEMORY OPTIMIZATION ===
 # Maximize usage of fast compressed zRAM before hitting disk
 vm.swappiness=100
@@ -68,7 +65,7 @@ vm.page-cluster=0
 vm.overcommit_memory=1
 SYSCTL_CONF
 
-sysctl -p /etc/sysctl.conf
+sysctl -p /etc/sysctl.d/99-fengshui.conf 2>/dev/null || sysctl --system 2>/dev/null || true
 
 # Step 4: Verification and Telemetry Output
 echo "[4/4] Verifying Super Smart Memory Allocation..."
