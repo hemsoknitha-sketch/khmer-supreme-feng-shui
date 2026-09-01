@@ -41,8 +41,8 @@ class SystemConfig:
     HF_ENDPOINT_BORAMEY: str = os.getenv("HF_ENDPOINT_BORAMEY", "")
     HF_ENDPOINT_REASONER: str = os.getenv("HF_ENDPOINT_REASONER", "")
 
-    # Telegram Bot Token
-    TELEGRAM_BOT_TOKEN: str = os.getenv("TELEGRAM_BOT_TOKEN", "")
+    # Telegram Bot Token (supports both TELEGRAM_BOT_TOKEN and TELEGRAM_TOKEN)
+    TELEGRAM_BOT_TOKEN: str = os.getenv("TELEGRAM_BOT_TOKEN") or os.getenv("TELEGRAM_TOKEN") or ""
 
     # API Server Settings
     API_HOST: str = os.getenv("API_HOST", "0.0.0.0")

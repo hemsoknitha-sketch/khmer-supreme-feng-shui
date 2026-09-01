@@ -79,7 +79,9 @@ def run_all():
     if config.TELEGRAM_BOT_TOKEN and config.TELEGRAM_BOT_TOKEN != "your_telegram_bot_token_here":
         bot_thread = threading.Thread(target=run_bot, daemon=True)
         bot_thread.start()
-        logger.info("Telegram Bot thread started.")
+        logger.info("Telegram Bot background thread initiated.")
+    else:
+        logger.warning("Telegram Bot is not started because TELEGRAM_BOT_TOKEN is empty or default in .env.")
 
     # Start FastAPI server on main thread
     run_api()
