@@ -1,0 +1,21 @@
+[Unit]
+Description=Supreme Feng Shui AGI System Production Service
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/root/Supreme_FengShui
+ExecStart=/usr/bin/python3 main.py --mode all
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+Environment=PYTHONUNBUFFERED=1
+
+# Memory Limit Safety (Kills and restarts cleanly if exceeding 750MB)
+MemoryMax=750M
+MemoryHigh=650M
+
+[Install]
+WantedBy=multi-user.target

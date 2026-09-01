@@ -1,0 +1,113 @@
+"""
+FS-Supreme-Master (The Unified MoE Ensemble Model)
+Orchestrates the entire intelligence matrix:
+- FS-Boramey-7B (Generator & Teacher)
+- FS-Reasoner-7B (Complex Reasoning & Step-by-Step CoT)
+- FS-Embedder-M3 (Memory & Classical Knowledge Retrieval)
+- FS-Classical-Calc-v1 (Zero-Error Mathematical Calculator)
+- FS-Alert-Predictor (Fortune Scoring & Prediction Engine)
+- FS-Chronos-Cycle (Macro-Period & Cosmic Time-Series Engine)
+"""
+
+import logging
+from typing import Dict, Any, List, Optional
+from config import config
+from engines.classical_calc import ClassicalCalcEngine
+from engines.hf_bridge import HuggingFaceBridge
+from engines.rag_client import RAGKnowledgeRetriever
+from engines.alert_predictor import AlertPredictionEngine
+from engines.chronos_cycle import ChronosCycleEngine
+
+logger = logging.getLogger("SupremeFengShui.Master")
+
+
+class SupremeFengShuiMaster:
+    """FS-Supreme-Master: Unified Mixture of Experts (MoE) Architecture."""
+
+    def __init__(self, hf_token: Optional[str] = None):
+        logger.info("Initializing Supreme Feng Shui Master Orchestrator...")
+        self.calc_engine = ClassicalCalcEngine()
+        self.hf_bridge = HuggingFaceBridge(token=hf_token)
+        self.rag_engine = RAGKnowledgeRetriever(token=hf_token)
+        self.alert_predictor = AlertPredictionEngine()
+        self.chronos_engine = ChronosCycleEngine()
+        logger.info("All 4 Engine Groups successfully linked to Master Orchestrator.")
+
+    def consult(
+        self,
+        query: str,
+        birth_date: Optional[str] = None,
+        birth_time: str = "12:00",
+        gender: str = "male",
+        house_degree: Optional[float] = None,
+        complex_reasoning: bool = False
+    ) -> Dict[str, Any]:
+        """
+        Primary consultation pipeline. Coordinates all 4 model groups to produce
+        an authentic, mathematically-grounded, and personalized Feng Shui synthesis.
+        """
+        evidence_packet = {}
+
+        # 1. Classical Calculation Engine (FS-Classical-Calc-v1)
+        if birth_date:
+            try:
+                birth_year = int(birth_date.strip().split("-")[0])
+                gua_res = self.calc_engine.calculate_life_gua(birth_year, gender)
+                bazi_res = self.calc_engine.calculate_bazi(birth_date, birth_time)
+                if gua_res.get("success"):
+                    evidence_packet["life_gua"] = gua_res["data"]
+                if bazi_res.get("success"):
+                    evidence_packet["bazi"] = bazi_res["data"]
+            except Exception as e:
+                logger.warning(f"Error parsing birth date for calculation: {e}")
+
+        # 2. 24 Mountains Calculation
+        if house_degree is not None:
+            mountain_res = self.calc_engine.get_mountain_by_degree(house_degree)
+            if mountain_res.get("success"):
+                evidence_packet["24_mountains"] = mountain_res["mountain"]
+
+        # 3. Flying Stars (Current Year Period 9)
+        flying_stars = self.calc_engine.calculate_flying_stars(2024)
+        if flying_stars.get("success"):
+            evidence_packet["flying_stars_2024"] = flying_stars["data"]
+
+        # 4. Fortune Prediction (FS-Alert-Predictor)
+        if birth_date:
+            pred_res = self.alert_predictor.predict_fortune(birth_date, birth_time)
+            if pred_res.get("success"):
+                evidence_packet["fortune_prediction"] = pred_res["data"]
+
+        # 5. Knowledge Retrieval (FS-Embedder-M3)
+        relevant_docs = self.rag_engine.search_knowledge(query, top_k=3)
+        knowledge_context = "\n".join([f"• [{d['category']}] {d['title']}: {d['text']}" for d in relevant_docs])
+
+        # 6. Intent Routing (Choose between FS-Boramey-7B or FS-Reasoner-7B)
+        needs_reasoning = complex_reasoning or any(
+            k in query for k in ["ហេតុអ្វី", "វិភាគស៊ីជម្រៅ", "ផ្សំតារា", "បកស្រាយ", "គណនាជោគជតារាសី", "ទិសដៅជីវិត"]
+        )
+        model_type = "reasoner" if needs_reasoning else "boramey"
+
+        # 7. Construct Verified System Context
+        system_prompt = (
+            "អ្នកគឺជា FS-Supreme-Master (កំពូលបរមគ្រូបញ្ញាសិប្បនិម្មិតហុងស៊ុយខ្មែរ AGI)។ "
+            "ចូរឆ្លើយតបយ៉ាងពិរោះ ត្រឹមត្រូវតាមក្បួនខ្នាតបុរាណចិន និងខ្មែរ ដោយផ្អែកលើទិន្នន័យជាក់ស្តែងខាងក្រោម។\n\n"
+            f"[ទិន្នន័យគណនាពិតពីម៉ាស៊ីន]:\n{evidence_packet}\n\n"
+            f"[ចំណេះដឹងយោងពីបណ្ណាល័យ]:\n{knowledge_context}"
+        )
+
+        # 8. Generate Synthesis via Hugging Face Bridge
+        ai_response = self.hf_bridge.generate_chat(
+            system_prompt=system_prompt,
+            user_prompt=query,
+            model_type=model_type
+        )
+
+        return {
+            "success": True,
+            "query": query,
+            "model_used": "FS-Reasoner-7B (CoT)" if model_type == "reasoner" else "FS-Boramey-7B (Generator)",
+            "evidence": evidence_packet,
+            "relevant_knowledge": relevant_docs,
+            "synthesis": ai_response
+        }

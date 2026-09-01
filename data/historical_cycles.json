@@ -1,0 +1,93 @@
+{
+  "cycles": [
+    {
+      "period": 1,
+      "years": "1864-1883",
+      "element": "Water",
+      "trigram": "Kan",
+      "name_kh": "យុគទី ១ (ធាតុទឹក - ទិសខាងជើង)",
+      "energy_theme": "ការចាប់ផ្តើមប្រាជ្ញា និងចរន្តទឹកពាណិជ្ជកម្មថ្មី"
+    },
+    {
+      "period": 2,
+      "years": "1884-1903",
+      "element": "Earth",
+      "trigram": "Kun",
+      "name_kh": "យុគទី ២ (ធាតុដី - ទិសនិរតី)",
+      "energy_theme": "ការកសាងមូលដ្ឋានគ្រឹះកសិកម្ម និងដីធ្លី"
+    },
+    {
+      "period": 3,
+      "years": "1904-1923",
+      "element": "Wood",
+      "trigram": "Zhen",
+      "name_kh": "យុគទី ៣ (ធាតុឈើ - ទិសខាងកើត)",
+      "energy_theme": "ការរីកចម្រើនឧស្សាហកម្ម និងការច្នៃប្រឌិត"
+    },
+    {
+      "period": 4,
+      "years": "1924-1943",
+      "element": "Wood",
+      "trigram": "Xun",
+      "name_kh": "យុគទី ៤ (ធាតុឈើ - ទិសអាគ្នេយ៍)",
+      "energy_theme": "យុគនៃការអភិវឌ្ឍន៍ ការអប់រំ និងការផ្សព្វផ្សាយចំណេះដឹង"
+    },
+    {
+      "period": 5,
+      "years": "1944-1963",
+      "element": "Earth",
+      "trigram": "Center",
+      "name_kh": "យុគទី ៥ (ធាតុដីកណ្តាល - យុគបំលែងធំ)",
+      "energy_theme": "យុគនៃការផ្លាស់ប្តូរ និងរៀបចំសណ្តាប់ធ្នាប់ពិភពលោកឡើងវិញ"
+    },
+    {
+      "period": 6,
+      "years": "1964-1983",
+      "element": "Metal",
+      "trigram": "Qian",
+      "name_kh": "យុគទី ៦ (ធាតុមាស - ទិសពាយ័ព្យ)",
+      "energy_theme": "យុគនៃភាពជាអ្នកដឹកនាំ ឧស្សាហកម្មធុនធ្ងន់ និងច្បាប់"
+    },
+    {
+      "period": 7,
+      "years": "1984-2003",
+      "element": "Metal",
+      "trigram": "Dui",
+      "name_kh": "យុគទី ៧ (ធាតុមាស - ទិសខាងលិច)",
+      "energy_theme": "យុគនៃបច្ចេកវិទ្យា ទំនាក់ទំនង ការកម្សាន្ត និងពាណិជ្ជកម្មសកល"
+    },
+    {
+      "period": 8,
+      "years": "2004-2023",
+      "element": "Earth",
+      "trigram": "Gen",
+      "name_kh": "យុគទី ៨ (ធាតុដី - ទិសឦសាន)",
+      "energy_theme": "យុគនៃអចលនទ្រព្យ យុវជន និងបណ្តាញព័ត៌មានវិទ្យា"
+    },
+    {
+      "period": 9,
+      "years": "2024-2043",
+      "element": "Fire",
+      "trigram": "Li",
+      "name_kh": "យុគទី ៩ (ធាតុភ្លើង - ទិសខាងត្បូង)",
+      "energy_theme": "យុគនៃបញ្ញាសិប្បនិម្មិត (AI) ថាមពលអគ្គិសនី ចក្ខុវិស័យ វិញ្ញាណ និងការផ្លាស់ប្តូរល្បឿនលឿន"
+    },
+    {
+      "period": 1,
+      "years": "2044-2063",
+      "element": "Water",
+      "trigram": "Kan",
+      "name_kh": "យុគទី ១ ថ្មី (ធាតុទឹក - វដ្តធំថ្មី)",
+      "energy_theme": "យុគនៃការរៀបចំសកលលោកលើមូលដ្ឋានបញ្ញាបរិសុទ្ធ និងវិទ្យាសាស្ត្រអវកាស"
+    }
+  ],
+  "current_period": 9,
+  "fire_period_recommendations": {
+    "prominent_industries": ["AI & Machine Learning", "Renewable & Solar Energy", "Virtual Reality & Metaverse", "Cosmetics & Beauty", "Psychology & Spiritual Wellness"],
+    "auspicious_colors": ["ក្រហម (Red)", "ស្វាយ (Purple)", "ផ្កាឈូក (Pink)", "ទឹកក្រូច (Orange)"],
+    "vital_directions": {
+      "facing_auspicious": "ខាងត្បូង (South - Li Palace)",
+      "water_wealth_direction": "ខាងជើង (North - Kan Palace)"
+    }
+  }
+}

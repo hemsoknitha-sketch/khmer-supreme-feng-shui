@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="km">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Supreme Feng Shui AGI System | ប្រព័ន្ធបញ្ញាសិប្បនិម្មិតហុងស៊ុយកម្រិតកំពូល</title>
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Kantumruy+Pro:wght@300;400;500;600;700&family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/css/style.css">
+    <!-- FontAwesome for icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+</head>
+<body>
+    <!-- Background Ambient Glows -->
+    <div class="glow-sphere glow-1"></div>
+    <div class="glow-sphere glow-2"></div>
+    <div class="glow-sphere glow-3"></div>
+
+    <div class="app-container">
+        <!-- Navigation Header -->
+        <header class="glass-header">
+            <div class="logo-group">
+                <div class="logo-icon"><i class="fa-solid fa-yin-yang fa-spin"></i></div>
+                <div class="logo-text">
+                    <h1>SUPREME FENG SHUI AGI</h1>
+                    <span class="tagline">ប្រព័ន្ធបញ្ញាសិប្បនិម្មិតហុងស៊ុយកម្រិតកំពូល • យុគទី ៩</span>
+                </div>
+            </div>
+            <div class="system-status-badge">
+                <span class="pulse-dot"></span>
+                <span id="systemStatusText">MoE Active • 1GB VPS Optimized</span>
+            </div>
+        </header>
+
+        <!-- Main Workspace Tabs -->
+        <nav class="nav-tabs">
+            <button class="tab-btn active" onclick="switchTab('consultTab')"><i class="fa-solid fa-comments"></i> ពិគ្រោះយោបល់ AI Master</button>
+            <button class="tab-btn" onclick="switchTab('calcTab')"><i class="fa-solid fa-compass"></i> គណនា Life Gua & 24 ភ្នំ</button>
+            <button class="tab-btn" onclick="switchTab('starsTab')"><i class="fa-solid fa-star"></i> តារាហោះ យុគ ៩</button>
+            <button class="tab-btn" onclick="switchTab('baziTab')"><i class="fa-solid fa-scroll"></i> BaZi & ជោគជតារាសី</button>
+        </nav>
+
+        <!-- TAB 1: AI Master Consultation -->
+        <section id="consultTab" class="tab-content active">
+            <div class="grid-2-col">
+                <!-- User Profile Input Card -->
+                <div class="glass-card profile-card">
+                    <div class="card-title">
+                        <i class="fa-solid fa-user-astronaut"></i>
+                        <h3>ព័ត៌មានម្ចាស់ជោគជតា (Destiny Profile)</h3>
+                    </div>
+                    <form id="consultForm" onsubmit="event.preventDefault(); submitConsultation();">
+                        <div class="form-group">
+                            <label>ថ្ងៃខែឆ្នាំកំណើត (Birth Date):</label>
+                            <input type="date" id="profileBirthDate" value="1988-05-15" required>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>ម៉ោងកំណើត (Time):</label>
+                                <input type="time" id="profileBirthTime" value="10:30">
+                            </div>
+                            <div class="form-group">
+                                <label>ភេទ (Gender):</label>
+                                <select id="profileGender">
+                                    <option value="male" selected>ប្រុស (Male)</option>
+                                    <option value="female">ស្រី (Female)</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label>ទិសផ្ទះ ឬការិយាល័យ (Degree 0-360°):</label>
+                            <input type="number" id="houseDegree" placeholder="ឧទាហរណ៍៖ 180 (ទិសខាងត្បូង)" min="0" max="360" value="180">
+                        </div>
+                        <div class="form-group">
+                            <label>របៀបវិភាគ (Reasoning Mode):</label>
+                            <div class="checkbox-group">
+                                <input type="checkbox" id="enableReasoning" checked>
+                                <label for="enableReasoning">ប្រើ FS-Reasoner-7B (វិភាគស៊ីជម្រៅ CoT)</label>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label>សំណួរ ឬតម្រូវការរបស់អ្នក៖</label>
+                            <textarea id="consultQuery" rows="3" placeholder="ឧ. តើខ្ញុំគួររៀបចំតុធ្វើការ និងទ្វារធំយ៉ាងណាដើម្បីបង្កើនទ្រព្យសម្បត្តិក្នុងឆ្នាំ ២០២៤?"></textarea>
+                        </div>
+                        <button type="submit" class="primary-btn" id="btnConsult">
+                            <i class="fa-solid fa-wand-magic-sparkles"></i> វិភាគជាមួយ FS-Supreme-Master
+                        </button>
+                    </form>
+                </div>
+
+                <!-- Chat / Result View -->
+                <div class="glass-card chat-card">
+                    <div class="card-title">
+                        <i class="fa-solid fa-brain"></i>
+                        <h3>ការបកស្រាយពី Supreme AI Master</h3>
+                        <span class="badge" id="modelUsedBadge">FS-Supreme-Master</span>
+                    </div>
+                    <div class="chat-output" id="chatOutput">
+                        <div class="ai-msg welcome-msg">
+                            <div class="ai-avatar"><i class="fa-solid fa-yin-yang"></i></div>
+                            <div class="ai-bubble">
+                                <strong>សូមស្វាគមន៍មកកាន់ Supreme Feng Shui AGI System!</strong><br>
+                                សូមបំពេញព័ត៌មានថ្ងៃខែឆ្នាំកំណើត និងសួរសំណួរដើម្បីឱ្យម៉ូដែល **FS-Supreme-Master** ធ្វើការគណនា និងវិភាគលម្អិតជូនលោកអ្នក។
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- TAB 2: Life Gua & 24 Mountains -->
+        <section id="calcTab" class="tab-content">
+            <div class="grid-2-col">
+                <div class="glass-card">
+                    <div class="card-title">
+                        <i class="fa-solid fa-calculator"></i>
+                        <h3>ម៉ាស៊ីនគណនា Life Gua (FS-Classical-Calc-v1)</h3>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>ឆ្នាំកំណើត (Year):</label>
+                            <input type="number" id="guaYearInput" value="1988">
+                        </div>
+                        <div class="form-group">
+                            <label>ភេទ (Gender):</label>
+                            <select id="guaGenderInput">
+                                <option value="male" selected>ប្រុស</option>
+                                <option value="female">ស្រី</option>
+                            </select>
+                        </div>
+                    </div>
+                    <button class="primary-btn" onclick="calculateGuaDirect()"><i class="fa-solid fa-bolt"></i> គណនា Life Gua</button>
+                    <div id="guaResult" class="result-box"></div>
+                </div>
+
+                <div class="glass-card">
+                    <div class="card-title">
+                        <i class="fa-solid fa-compass"></i>
+                        <h3>ត្រីវិស័យទិស ២៤ ភ្នំ (24 Mountains Luopan)</h3>
+                    </div>
+                    <div class="compass-wrapper">
+                        <div class="compass-dial" id="compassDial">
+                            <div class="needle"></div>
+                            <div class="center-cap">☯</div>
+                        </div>
+                    </div>
+                    <div class="form-group" style="margin-top: 15px;">
+                        <label>បង្វិលមុំដឺក្រេ (0° - 360°):</label>
+                        <input type="range" id="compassRange" min="0" max="360" value="180" oninput="updateCompass(this.value)">
+                    </div>
+                    <div id="mountainInfo" class="info-pill">ទិសបច្ចុប្បន្ន៖ 180° - 丙/午 (ខាងត្បូង ធាតុភ្លើង)</div>
+                </div>
+            </div>
+        </section>
+
+        <!-- TAB 3: Flying Stars Period 9 -->
+        <section id="starsTab" class="tab-content">
+            <div class="glass-card">
+                <div class="card-title">
+                    <i class="fa-solid fa-table-cells"></i>
+                    <h3>តារាងតារាហោះ ៩ វិហារ (Xuan Kong Flying Stars - Period 9 Fire)</h3>
+                    <div class="year-selector">
+                        <button class="chip-btn active" onclick="loadFlyingStars(2024)">ឆ្នាំ ២០២៤</button>
+                        <button class="chip-btn" onclick="loadFlyingStars(2025)">ឆ្នាំ ២០២៥</button>
+                        <button class="chip-btn" onclick="loadFlyingStars(2026)">ឆ្នាំ ២០២៦</button>
+                    </div>
+                </div>
+                <div class="flying-star-grid" id="flyingStarGrid">
+                    <!-- Dynamic 3x3 Lo Shu Grid -->
+                </div>
+                <div id="starAdviceBox" class="advice-card">
+                    <h4>💡 យុទ្ធសាស្ត្ររៀបចំគេហដ្ឋានក្នុងយុគទី ៩ (Period 9: 2024-2043)</h4>
+                    <p>យុគទី ៩ ជាយុគធាតុភ្លើង តារាលេខ ៩ ស្វាយ (Star 9 Purple) ជាតារាអធិរាជ។ ទិសខាងត្បូងជាទិសស្រូបថាមពល Wang Qi ខ្លាំងបំផុត!</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- TAB 4: BaZi & Fortune Prediction -->
+        <section id="baziTab" class="tab-content">
+            <div class="grid-2-col">
+                <div class="glass-card">
+                    <div class="card-title">
+                        <i class="fa-solid fa-scroll"></i>
+                        <h3>សសរស្តម្ភទាំង ៤ (BaZi Four Pillars)</h3>
+                    </div>
+                    <div class="bazi-grid" id="baziPillars">
+                        <!-- Pillars Loaded Dynamically -->
+                    </div>
+                    <div id="dayMasterBox" class="result-box" style="margin-top:15px;"></div>
+                </div>
+
+                <div class="glass-card">
+                    <div class="card-title">
+                        <i class="fa-solid fa-gauge-high"></i>
+                        <h3>កម្រិតសំណាងប្រចាំថ្ងៃ (Luck Meter)</h3>
+                    </div>
+                    <div class="meter-group" id="luckMeters">
+                        <div class="meter-item">
+                            <div class="meter-label"><span>សំណាងទូទៅ</span><span id="luckOverallVal">88%</span></div>
+                            <div class="progress-bar"><div class="fill fill-gold" id="luckOverallBar" style="width: 88%;"></div></div>
+                        </div>
+                        <div class="meter-item">
+                            <div class="meter-label"><span>លាភទ្រព្យសម្បត្តិ</span><span id="luckWealthVal">85%</span></div>
+                            <div class="progress-bar"><div class="fill fill-green" id="luckWealthBar" style="width: 85%;"></div></div>
+                        </div>
+                        <div class="meter-item">
+                            <div class="meter-label"><span>អាជីព និងកិត្តិយស</span><span id="luckCareerVal">80%</span></div>
+                            <div class="progress-bar"><div class="fill fill-blue" id="luckCareerBar" style="width: 80%;"></div></div>
+                        </div>
+                        <div class="meter-item">
+                            <div class="meter-label"><span>ស្នេហា និងទំនាក់ទំនង</span><span id="luckLoveVal">75%</span></div>
+                            <div class="progress-bar"><div class="fill fill-pink" id="luckLoveBar" style="width: 75%;"></div></div>
+                        </div>
+                        <div class="meter-item">
+                            <div class="meter-label"><span>សុខភាព និងថាមពល</span><span id="luckHealthVal">90%</span></div>
+                            <div class="progress-bar"><div class="fill fill-teal" id="luckHealthBar" style="width: 90%;"></div></div>
+                        </div>
+                    </div>
+                    <div id="dailyRemedyBox" class="advice-card" style="margin-top: 15px;"></div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Footer -->
+        <footer class="glass-footer">
+            <p>Supreme Feng Shui AGI System © 2026 • ដំណើរការលើ Google Cloud VPS 1GB RAM & Hugging Face Hub</p>
+        </footer>
+    </div>
+
+    <script src="/static/js/app.js"></script>
+</body>
+</html>

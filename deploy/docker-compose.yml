@@ -1,0 +1,20 @@
+version: '3.8'
+
+services:
+  fengshui-agi:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    container_name: supreme_fengshui_agi
+    restart: always
+    ports:
+      - "8000:8000"
+    env_file:
+      - ../.env
+    deploy:
+      resources:
+        limits:
+          memory: 600M
+    volumes:
+      - ../data:/app/data
+      - ../cache:/app/cache

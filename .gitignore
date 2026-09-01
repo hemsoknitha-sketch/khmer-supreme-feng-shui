@@ -1,0 +1,30 @@
+# Environment variables and secrets (CRITICAL: Never commit to Git)
+.env
+*.env
+
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+venv/
+env/
+ENV/
+.venv/
+
+# IDE & OS files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Cache & logs
+cache/
+*.log
+logs/
+
+# Test & coverage
+.pytest_cache/
+.coverage
+htmlcov/
