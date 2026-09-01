@@ -72,18 +72,20 @@ def run_cli():
     print("=" * 80)
 
 
+import multiprocessing
+
 def run_all():
-    """Run both FastAPI REST API and Telegram Bot concurrently."""
+    """Run both FastAPI REST API and Telegram Bot concurrently in isolated processes."""
     logger.info("Starting Supreme Feng Shui All-in-One Daemon...")
-    # Start bot in separate background daemon thread if token exists
+    # Start bot in separate background daemon process if token exists
     if config.TELEGRAM_BOT_TOKEN and config.TELEGRAM_BOT_TOKEN != "your_telegram_bot_token_here":
-        bot_thread = threading.Thread(target=run_bot, daemon=True)
-        bot_thread.start()
-        logger.info("Telegram Bot background thread initiated.")
+        bot_proc = multiprocessing.Process(target=run_bot, daemon=True)
+        bot_proc.start()
+        logger.info(f"Telegram Bot process started with PID: {bot_proc.pid}")
     else:
         logger.warning("Telegram Bot is not started because TELEGRAM_BOT_TOKEN is empty or default in .env.")
 
-    # Start FastAPI server on main thread
+    # Start FastAPI server on main process
     run_api()
 
 
