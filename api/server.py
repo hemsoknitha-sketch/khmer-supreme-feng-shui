@@ -290,6 +290,28 @@ def analyze_love(req: LoveAnalyzeRequest):
     return res
 
 
+@app.post("/api/love/treatise")
+def get_love_treatise(req: LoveAnalyzeRequest):
+    """
+    Generate the 3,500 - 4,000 words Grand Master Zenith Treatise on Feng Shui Romance & Peach Blossom.
+    """
+    from engines.mahasneh_love_engine import mahasneh_love_engine
+
+    res = mahasneh_love_engine.analyze_love_profile(
+        birth_date_1=req.birth_date_1,
+        gender_1=req.gender_1,
+        birth_date_2=req.birth_date_2,
+        gender_2=req.gender_2
+    )
+    if not res.get("success"):
+        raise HTTPException(status_code=400, detail=res.get("error", "Failed to generate treatise"))
+    return {
+        "success": True,
+        "zenith_report": res["zenith_report"],
+        "treatise": res["treatise"]
+    }
+
+
 @app.get("/api/curriculum/categories")
 def get_curriculum_categories():
     """Retrieve 4 grand categories of Classical Feng Shui."""

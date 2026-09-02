@@ -1395,8 +1395,13 @@ class FengShuiTelegramBot:
             return
 
         msg = res["zenith_report"]
+        p2_str = b_date_2 if b_date_2 else "none"
+        g2_str = gender_2 if gender_2 else "none"
+        tr_code = f"love_tr_{b_date_1}_{gender_1}_{p2_str}_{g2_str}"
+
         keyboard = [
-            [InlineKeyboardButton("💬 ពិគ្រោះក្បួនស្នេហ៍លម្អិត", callback_data="menu_ask")],
+            [InlineKeyboardButton("📖 អានមហាក្បួនពិស្តារ ៤,០០០ ពាក្យ (Full Treatise)", callback_data=tr_code)],
+            [InlineKeyboardButton("💬 ពិគ្រោះក្បួនស្នេហ៍លម្អិតជាមួយ AI", callback_data="menu_ask")],
             [InlineKeyboardButton("🏠 ម៉ឺនុយដើម", callback_data="menu_main")]
         ]
         await self._safe_reply(update.message, msg, reply_markup=InlineKeyboardMarkup(keyboard))
@@ -1871,7 +1876,7 @@ class FengShuiTelegramBot:
 
         try:
             # Check VIP permissions for gated callback features
-            gated_prefixes = ("curr_", "render_", "calc_", "cel_", "tz_")
+            gated_prefixes = ("curr_", "render_", "calc_", "cel_", "tz_", "love_tr_")
             gated_exact = {"menu_curriculum", "menu_gua", "menu_flyingstars", "menu_bazi", "menu_predict", "menu_render3d", "menu_ask", "menu_love", "menu_celestial"}
             if (data in gated_exact or any(data.startswith(p) for p in gated_prefixes)) and not self._is_vip_or_admin(from_user.id):
                 await self._send_vip_required_notice(query, from_user.id)
@@ -2044,6 +2049,29 @@ class FengShuiTelegramBot:
                     [InlineKeyboardButton("🏠 ម៉ឺនុយដើម", callback_data="menu_main")]
                 ]
                 await self._safe_edit(query, guide_text, reply_markup=InlineKeyboardMarkup(keyboard))
+
+            elif data.startswith("love_tr_"):
+                parts = data.split("_")
+                b1 = parts[2]
+                g1 = parts[3]
+                b2 = parts[4] if len(parts) > 4 and parts[4] != "none" else None
+                g2 = parts[5] if len(parts) > 5 and parts[5] != "none" else None
+
+                res = self.love.analyze_love_profile(
+                    birth_date_1=b1,
+                    gender_1=g1,
+                    birth_date_2=b2,
+                    gender_2=g2 or "female"
+                )
+                treatise_text = res.get("treatise", "❌ មិនអាចទាញយកក្បួនពិស្តារបានឡើយ។")
+                keyboard = [
+                    [InlineKeyboardButton("💬 សួរគ្រូហុងស៊ុយ AI បន្ថែម", callback_data="menu_ask")],
+                    [
+                        InlineKeyboardButton("💖 ម៉ឺនុយមហាស្នេហ៍", callback_data="menu_love"),
+                        InlineKeyboardButton("🏠 ម៉ឺនុយដើម", callback_data="menu_main")
+                    ]
+                ]
+                await self._safe_edit(query, treatise_text, reply_markup=InlineKeyboardMarkup(keyboard))
 
             # VIP Menu
             elif data == "menu_vip":
