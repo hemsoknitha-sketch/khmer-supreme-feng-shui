@@ -121,6 +121,17 @@ class DatabaseManager:
 
                 if row:
                     user = dict(row)
+
+                    # Auto-promote to super_admin if configured in ADMIN_USER_IDS
+                    if is_default_admin and user["role"] != "super_admin":
+                        cursor.execute("""
+                            UPDATE users SET role = 'super_admin', vip_tier = 'admin', updated_at = ?
+                            WHERE telegram_id = ?
+                        """, (now_str, telegram_id))
+                        conn.commit()
+                        user["role"] = "super_admin"
+                        user["vip_tier"] = "admin"
+
                     # Check VIP expiration
                     if user["vip_expiry"]:
                         try:
