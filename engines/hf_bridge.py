@@ -62,13 +62,27 @@ class HuggingFaceBridge:
             ]
             try:
                 logger.info(f"Calling Hugging Face Model: {target_model}")
-                response = self.client.chat.completions.create(
-                    model=target_model,
-                    messages=messages,
-                    max_tokens=max_tokens,
-                    temperature=temperature
-                )
-                return response.choices[0].message.content
+                # Try chat_completion (Standard HF InferenceClient API)
+                if hasattr(self.client, "chat_completion"):
+                    response = self.client.chat_completion(
+                        model=target_model,
+                        messages=messages,
+                        max_tokens=max_tokens,
+                        temperature=temperature
+                    )
+                    if hasattr(response, "choices") and response.choices:
+                        return response.choices[0].message.content
+                elif hasattr(self.client, "chat") and hasattr(self.client.chat, "completions"):
+                    response = self.client.chat.completions.create(
+                        model=target_model,
+                        messages=messages,
+                        max_tokens=max_tokens,
+                        temperature=temperature
+                    )
+                    return response.choices[0].message.content
+                else:
+                    prompt = f"<|im_start|>system\n{system_prompt}<|im_end|>\n<|im_start|>user\n{user_prompt}<|im_end|>\n<|im_start|>assistant\n"
+                    return self.client.text_generation(prompt, model=target_model, max_new_tokens=max_tokens, temperature=temperature)
             except Exception as e:
                 logger.error(f"Hugging Face API Call Error ({target_model}): {e}. Falling back to internal engine.")
                 return self._fallback_generation(system_prompt, user_prompt, model_type)

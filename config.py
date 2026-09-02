@@ -30,10 +30,12 @@ class SystemConfig:
     DATA_DIR: Path = BASE_DIR / "data"
     WEB_DIR: Path = BASE_DIR / "web"
     CACHE_DIR: Path = BASE_DIR / "cache"
+    MODELS_DIR: Path = BASE_DIR / "models"
 
     # Hugging Face Access Token & Model Configuration
     HF_TOKEN: str = os.getenv("HF_TOKEN", "")
-    HF_MODEL_BORAMEY: str = os.getenv("HF_MODEL_BORAMEY", "Qwen/Qwen2.5-7B-Instruct")
+    HF_MODEL_TRAINED: str = os.getenv("HF_MODEL_TRAINED", "hemsinath/khmer-supreme-feng-shui")
+    HF_MODEL_BORAMEY: str = os.getenv("HF_MODEL_BORAMEY", "hemsinath/khmer-supreme-feng-shui")
     HF_MODEL_REASONER: str = os.getenv("HF_MODEL_REASONER", "deepseek-ai/DeepSeek-R1-Distill-Qwen-7B")
     HF_MODEL_EMBEDDER: str = os.getenv("HF_MODEL_EMBEDDER", "BAAI/bge-m3")
 

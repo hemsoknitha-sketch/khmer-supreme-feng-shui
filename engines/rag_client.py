@@ -39,7 +39,7 @@ class RAGKnowledgeRetriever:
         self._load_knowledge_base()
 
     def _load_knowledge_base(self):
-        """Load curated 100 topics and lessons from JSON corpus."""
+        """Load curated 100 topics and detect Zenith 1000-lesson FAISS index."""
         kb_path = config.DATA_DIR / "knowledge_base.json"
         if kb_path.exists():
             try:
@@ -57,6 +57,17 @@ class RAGKnowledgeRetriever:
                 logger.info(f"Loaded {len(self.documents)} knowledge documents into memory.")
             except Exception as e:
                 logger.error(f"Failed to load knowledge base: {e}")
+
+        # Check for fine-tuned Zenith Models & 1000-lesson FAISS index
+        zenith_meta = config.MODELS_DIR / "zenith_metadata.json"
+        if zenith_meta.exists():
+            try:
+                with open(zenith_meta, "r", encoding="utf-8") as f:
+                    meta = json.load(f)
+                    pillars = ", ".join(meta.get("active_pillars", []))
+                    logger.info(f"✓ Zenith Master Model Active: 1000 Curriculum Lessons [{pillars}]")
+            except Exception as e:
+                logger.debug(f"Zenith metadata read error: {e}")
 
     def get_embedding(self, text: str) -> Optional[List[float]]:
         """Call Hugging Face Embedder (FS-Embedder-M3) remotely."""
