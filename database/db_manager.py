@@ -381,53 +381,46 @@ class DatabaseManager:
 
         return {"success": True, "telegram_id": telegram_id, "role": role, "vip_tier": vip_tier, "expiry": expiry_str}
 
-    def check_and_increment_query(self, telegram_id: int, max_free_limit: int = 5) -> Dict[str, Any]:
+    def check_and_increment_query(self, telegram_id: int, max_free_limit: int = 0) -> Dict[str, Any]:
         """
         Check if user has permission to make query.
-        VIP & Super Admin users have unlimited access.
-        Free users have daily limit (default 5 queries/day).
+        ONLY VIP & Super Admin users have permission to use the system.
+        Unactivated/Free users are strictly gated and directed to contact Admin @HemSinath.
         """
         user = self.get_or_create_user(telegram_id)
         is_vip = user["role"] in ("vip_monthly", "vip_yearly", "vip_lifetime", "super_admin") or user["vip_tier"] in ("monthly", "yearly", "lifetime", "admin")
 
         if is_vip:
-            # VIP unlimited
+            # VIP & Admin unlimited
             with get_db_connection() as conn:
                 conn.execute("UPDATE users SET total_queries = total_queries + 1 WHERE telegram_id = ?", (telegram_id,))
                 conn.commit()
             return {"allowed": True, "is_vip": True, "remaining": "∞ (Unlimited VIP)", "tier": user["vip_tier"]}
 
-        # Free tier daily limit check
-        today_str = datetime.utcnow().strftime("%Y-%m-%d")
-        daily_count = user.get("daily_queries_count", 0)
-        last_date = user.get("last_query_date", "")
+        # Free tier is strictly locked (0 free queries)
+        lock_message = (
+            "🔒 **មុខងារនេះត្រូវបានរក្សាសិទ្ធិសម្រាប់តែសមាជិក VIP & SUPER ADMIN ប៉ុណ្ណោះ!** 🔒\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "🌟 **SUPREME FENG SHUI AGI SYSTEM (Master Level v1.0.0)** 🌟\n\n"
+            "ដើម្បីប្រើប្រាស់ប្រព័ន្ធបញ្ញាសិប្បនិម្មិតហុងស៊ុយបុរាណ ចូលរៀន ១,០០០ មេរៀន គណនាជោគជតា ស្កេនរូបភាព និងបង្កើតប្លង់ 3D 4K សូមភ្ជាប់សេវាកម្ម VIP ជាមុនសិន។\n\n"
+            "💎 **អត្ថប្រយោជន៍សមាជិកភាព VIP:**\n"
+            "• 🧠 សួរគ្រូហុងស៊ុយ AI គ្មានដែនកំណត់ ២៤/៧/៣៦៥\n"
+            "• 📚 កម្មវិធីសិក្សា ១០០ ប្រធានបទ & ១០០០ មេរៀនស៊ីជម្រៅ\n"
+            "• 🧭 គណនា Life Gua, តារាហោះ យុគ ៩, BaZi ៤ សសរ & ១០ Gods\n"
+            "• 📸 ស្កេនពិនិត្យរូបភាពបន្ទប់/ផ្ទះរក Sha Qi & វិធីកែខៃ\n"
+            "• 🎨 បង្កើតប្លង់ហុងស៊ុយ 3D 4K Photorealistic\n\n"
+            "👉 **សូមទាក់ទងមកកាន់ SUPER ADMIN ផ្ទាល់ដើម្បីភ្ជាប់សេវាកម្ម VIP ភ្លាមៗ:**\n"
+            "👤 **Telegram Admin:** [@HemSinath](https://t.me/HemSinath)\n\n"
+            "🎟️ *(ប្រសិនបើលោកអ្នកមាន Key អាជ្ញាប័ណ្ណរួចហើយ សូមវាយ `/redeem <Key>` ឧទាហរណ៍ `/redeem FS-M-XXXX-XXXX`)*"
+        )
 
-        if last_date != today_str:
-            daily_count = 0
-
-        if daily_count >= max_free_limit:
-            return {
-                "allowed": False,
-                "is_vip": False,
-                "remaining": 0,
-                "tier": "free",
-                "message": (
-                    f"⚠️ **អ្នកបានប្រើប្រាស់អស់កូតាសួរឥតគិតថ្លៃប្រចាំថ្ងៃ ({max_free_limit}/{max_free_limit}) ហើយ!**\n\n"
-                    f"👑 **សូម Upgrade ទៅកាន់ VIP (ប្រចាំខែ/ប្រចាំឆ្នាំ/មួយជីវិត)** ដើម្បីទទួលបានសិទ្ធិប្រើប្រាស់ AGI Master ដោយគ្មានដែនកំណត់ 24/7!\n"
-                    f"👉 ចុច `/vip` ឬ `/redeem <key>` ដើម្បីបញ្ចូលលេខកូដអាជ្ញាប័ណ្ណ។"
-                )
-            }
-
-        # Increment count
-        with get_db_connection() as conn:
-            conn.execute("""
-                UPDATE users SET 
-                    daily_queries_count = ?, 
-                    last_query_date = ?, 
-                    total_queries = total_queries + 1 
-                WHERE telegram_id = ?
-            """, (daily_count + 1, today_str, telegram_id))
-            conn.commit()
+        return {
+            "allowed": False,
+            "is_vip": False,
+            "remaining": 0,
+            "tier": "free",
+            "message": lock_message
+        }
 
         remaining = max_free_limit - (daily_count + 1)
         return {"allowed": True, "is_vip": False, "remaining": remaining, "tier": "free"}

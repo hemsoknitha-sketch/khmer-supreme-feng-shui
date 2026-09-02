@@ -87,40 +87,103 @@ class FengShuiTelegramBot:
             except Exception as e2:
                 logger.warning(f"Could not edit message: {e2}")
 
-    def _get_main_keyboard(self, user_id: int = 0) -> InlineKeyboardMarkup:
-        """Construct the rich main dashboard interactive keyboard dynamically based on user role."""
-        user = self.db.get_or_create_user(user_id) if user_id else {"role": "user", "vip_tier": "free"}
-        is_admin = user.get("role") == "super_admin"
+    def _is_vip_or_admin(self, user_id: int) -> bool:
+        """Check if user has active VIP status or is Super Admin."""
+        if user_id in config.ADMIN_USER_IDS:
+            return True
+        user = self.db.get_or_create_user(user_id)
+        return user.get("role") in ("super_admin", "vip_monthly", "vip_yearly", "vip_lifetime") or user.get("vip_tier") in ("monthly", "yearly", "lifetime", "admin")
 
+    async def _send_vip_required_notice(self, message_or_query, from_user_id: int):
+        """Send attractive VIP lock notice directing users to @HemSinath."""
+        msg = (
+            "🔒 **មុខងារនេះត្រូវបានរក្សាសិទ្ធិសម្រាប់តែសមាជិក VIP & SUPER ADMIN ប៉ុណ្ណោះ!** 🔒\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "ដើម្បីប្រើប្រាស់ប្រព័ន្ធបញ្ញាសិប្បនិម្មិតហុងស៊ុយបុរាណ ចូលរៀន ១,០០០ មេរៀន គណនាជោគជតា ស្កេនរូបភាព និងបង្កើតប្លង់ 3D 4K សូមភ្ជាប់សេវាកម្ម VIP ជាមុនសិន។\n\n"
+            "💎 **អត្ថប្រយោជន៍សមាជិកភាព VIP:**\n"
+            "• 🧠 សួរគ្រូហុងស៊ុយ AI គ្មានដែនកំណត់ ២៤/៧/៣៦៥\n"
+            "• 📚 កម្មវិធីសិក្សា ១០០ ប្រធានបទ & ១០០០ មេរៀនស៊ីជម្រៅ\n"
+            "• 🧭 គណនា Life Gua, តារាហោះ យុគ ៩, BaZi ៤ សសរ & ១០ Gods\n"
+            "• 📸 ស្កេនពិនិត្យរូបភាពបន្ទប់/ផ្ទះរក Sha Qi & វិធីកែខៃ\n"
+            "• 🎨 បង្កើតប្លង់ហុងស៊ុយ 3D 4K Photorealistic\n\n"
+            "👉 **សូមទាក់ទងមកកាន់ SUPER ADMIN ផ្ទាល់ដើម្បីភ្ជាប់សេវាកម្ម VIP ភ្លាមៗ:**\n"
+            "👑 **Telegram Admin:** [@HemSinath](https://t.me/HemSinath)\n\n"
+            "🎟️ *(ប្រសិនបើលោកអ្នកមាន Key អាជ្ញាប័ណ្ណរួចហើយ សូមវាយ `/redeem <Key>`)*"
+        )
         keyboard = [
+            [InlineKeyboardButton("👑 ភ្ជាប់សេវាកម្ម VIP (ទាក់ទង Admin @HemSinath)", url="https://t.me/HemSinath")],
             [
-                InlineKeyboardButton("📚 កម្មវិធីសិក្សា ១០០០ មេរៀន", callback_data="menu_curriculum")
-            ],
-            [
-                InlineKeyboardButton("🧭 គណនា Life Gua", callback_data="menu_gua"),
-                InlineKeyboardButton("🌌 តារាហោះ យុគ ៩", callback_data="menu_flyingstars")
-            ],
-            [
-                InlineKeyboardButton("🔮 វិភាគ BaZi ៤ សសរ", callback_data="menu_bazi"),
-                InlineKeyboardButton("📊 ទស្សន៍ទាយសំណាង", callback_data="menu_predict")
-            ],
-            [
-                InlineKeyboardButton("🎨 បង្កើតប្លង់ 3D 4K", callback_data="menu_render3d"),
-                InlineKeyboardButton("💬 សួរគ្រូហុងស៊ុយ AI", callback_data="menu_ask")
-            ],
-            [
-                InlineKeyboardButton("👑 ផតថល VIP & អាជ្ញាប័ណ្ណ", callback_data="menu_vip"),
-                InlineKeyboardButton("⚡ ស្ថានភាពប្រព័ន្ធ", callback_data="menu_health")
-            ],
-            [
-                InlineKeyboardButton("❓ ជំនួយ (Help)", callback_data="menu_help")
+                InlineKeyboardButton("🎟️ បញ្ចូល Key អាជ្ញាប័ណ្ណ", callback_data="vip_redeem_prompt"),
+                InlineKeyboardButton("💎 អត្ថប្រយោជន៍ VIP", callback_data="vip_perks_info")
             ]
         ]
+        if hasattr(message_or_query, "edit_message_text"):
+            await self._safe_edit(message_or_query, msg, reply_markup=InlineKeyboardMarkup(keyboard))
+        else:
+            await self._safe_reply(message_or_query, msg, reply_markup=InlineKeyboardMarkup(keyboard))
+
+    def _get_main_keyboard(self, user_id: int = 0) -> InlineKeyboardMarkup:
+        """Construct role-based interactive keyboard: Super Admin vs VIP vs Free/Unactivated."""
+        user = self.db.get_or_create_user(user_id) if user_id else {"role": "user", "vip_tier": "free"}
+        is_admin = user.get("role") == "super_admin" or user_id in config.ADMIN_USER_IDS
+        is_vip = user.get("vip_tier") in ("monthly", "yearly", "lifetime", "admin") or is_admin
 
         if is_admin:
-            keyboard.append([
-                InlineKeyboardButton("🛡️ ផ្ទាំងគ្រប់គ្រង Super Admin", callback_data="admin_panel")
-            ])
+            keyboard = [
+                [InlineKeyboardButton("📚 កម្មវិធីសិក្សា ១០០០ មេរៀន", callback_data="menu_curriculum")],
+                [
+                    InlineKeyboardButton("🧭 គណនា Life Gua", callback_data="menu_gua"),
+                    InlineKeyboardButton("🌌 តារាហោះ យុគ ៩", callback_data="menu_flyingstars")
+                ],
+                [
+                    InlineKeyboardButton("🔮 វិភាគ BaZi ៤ សសរ", callback_data="menu_bazi"),
+                    InlineKeyboardButton("📊 ទស្សន៍ទាយសំណាង", callback_data="menu_predict")
+                ],
+                [
+                    InlineKeyboardButton("🎨 បង្កើតប្លង់ 3D 4K", callback_data="menu_render3d"),
+                    InlineKeyboardButton("💬 សួរគ្រូហុងស៊ុយ AI", callback_data="menu_ask")
+                ],
+                [
+                    InlineKeyboardButton("👑 ផតថល VIP & អាជ្ញាប័ណ្ណ", callback_data="menu_vip"),
+                    InlineKeyboardButton("⚡ ស្ថានភាពប្រព័ន្ធ", callback_data="menu_health")
+                ],
+                [InlineKeyboardButton("🛡️ ផ្ទាំងគ្រប់គ្រង Super Admin", callback_data="admin_panel")],
+                [InlineKeyboardButton("❓ ជំនួយ (Help)", callback_data="menu_help")]
+            ]
+        elif is_vip:
+            keyboard = [
+                [InlineKeyboardButton("📚 កម្មវិធីសិក្សា ១០០០ មេរៀន", callback_data="menu_curriculum")],
+                [
+                    InlineKeyboardButton("🧭 គណនា Life Gua", callback_data="menu_gua"),
+                    InlineKeyboardButton("🌌 តារាហោះ យុគ ៩", callback_data="menu_flyingstars")
+                ],
+                [
+                    InlineKeyboardButton("🔮 វិភាគ BaZi ៤ សសរ", callback_data="menu_bazi"),
+                    InlineKeyboardButton("📊 ទស្សន៍ទាយសំណាង", callback_data="menu_predict")
+                ],
+                [
+                    InlineKeyboardButton("🎨 បង្កើតប្លង់ 3D 4K", callback_data="menu_render3d"),
+                    InlineKeyboardButton("💬 សួរគ្រូហុងស៊ុយ AI", callback_data="menu_ask")
+                ],
+                [
+                    InlineKeyboardButton("👑 ស្ថានភាព VIP របស់ខ្ញុំ", callback_data="menu_vip"),
+                    InlineKeyboardButton("⚡ ស្ថានភាពប្រព័ន្ធ", callback_data="menu_health")
+                ],
+                [InlineKeyboardButton("❓ ជំនួយ (Help)", callback_data="menu_help")]
+            ]
+        else:
+            # Free / Unactivated user: compelling gated buttons directing to @HemSinath
+            keyboard = [
+                [InlineKeyboardButton("👑 ភ្ជាប់សេវាកម្ម VIP (ទាក់ទង Admin @HemSinath)", url="https://t.me/HemSinath")],
+                [
+                    InlineKeyboardButton("🎟️ បញ្ចូល Key អាជ្ញាប័ណ្ណ", callback_data="vip_redeem_prompt"),
+                    InlineKeyboardButton("💎 អត្ថប្រយោជន៍ VIP", callback_data="vip_perks_info")
+                ],
+                [
+                    InlineKeyboardButton("⚡ ស្ថានភាពប្រព័ន្ធ", callback_data="menu_health"),
+                    InlineKeyboardButton("❓ ជំនួយ (Help)", callback_data="menu_help")
+                ]
+            ]
 
         return InlineKeyboardMarkup(keyboard)
 
@@ -149,7 +212,7 @@ class FengShuiTelegramBot:
             logger.warning(f"Could not register Telegram Bot commands: {e}")
 
     async def start_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Handle /start command with rich interactive dashboard and user profile tracking."""
+        """Handle /start command with role-based UI and compelling VIP invitation."""
         from_user = update.effective_user
         user = self.db.get_or_create_user(
             telegram_id=from_user.id,
@@ -161,29 +224,55 @@ class FengShuiTelegramBot:
         if user.get("is_new_user"):
             asyncio.create_task(self._notify_admin_new_user(context, from_user, user))
 
-        tier_badges = {
-            "free": "✨ សមាជិកទូទៅ (Free Member)",
-            "monthly": "🌟 VIP ប្រចាំខែ (Monthly VIP)",
-            "yearly": "👑 VIP ប្រចាំឆ្នាំ (Yearly VIP)",
-            "lifetime": "💎 VIP មួយជីវិត (Lifetime VIP)",
-            "admin": "🛡️ មេការគ្រប់គ្រង (Super Admin)"
-        }
-        badge = tier_badges.get(user.get("vip_tier", "free"), "✨ សមាជិកទូទៅ")
+        is_admin = user.get("role") == "super_admin" or from_user.id in config.ADMIN_USER_IDS
+        is_vip = user.get("vip_tier") in ("monthly", "yearly", "lifetime", "admin") or is_admin
 
-        welcome_text = (
-            "🌟 **SUPREME FENG SHUI AGI SYSTEM (Master Level v1.0.0)** 🌟\n"
-            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            f"👤 **គណនីរបស់អ្នក:** `{from_user.full_name}` (ID: `{from_user.id}`)\n"
-            f"🏷️ **កម្រិតសមាជិកភាព:** **{badge}**\n\n"
-            "សូមស្វាគមន៍មកកាន់ប្រព័ន្ធបញ្ញាសិប្បនិម្មិតហុងស៊ុយកំពូល ដែលរួមបញ្ចូលគ្នានូវ **៧ សសរស្តម្ភស្នូល** និង **កម្មវិធីសិក្សា ១០០០ មេរៀន** តាមក្បួនបុរាណពិតប្រាកដ!\n\n"
-            "⚡ **សមត្ថភាពស្នូលរបស់ប្រព័ន្ធ:**\n"
-            "• 📚 **1,000 Lessons Curriculum**: មេរៀនក្បួនហុងស៊ុយ ១០០០ មេរៀនលម្អិត\n"
-            "• 🧠 **FS-Supreme-Master AI**: ម៉ូដែលឆ្លើយតប និងវែកញែកកម្រិតខ្ពស់ 24/7\n"
-            "• 🧭 **FS-Classical-Calc**: គណនា Life Gua, Flying Stars, BaZi សូន្យកំហុស\n"
-            "• 📊 **FS-Alert-Predictor**: ទស្សន៍ទាយជោគជតារាសីប្រចាំថ្ងៃ 0-100%\n"
-            "• 👑 **VIP Portal**: សេវាកម្មទស្សន៍ទាយគ្មានដែនកំណត់ & អាជ្ញាប័ណ្ណពិសេស\n\n"
-            "👇 **សូមចុចប៊ូតុងខាងក្រោមដើម្បីចាប់ផ្តើមប្រើប្រាស់ភ្លាមៗ:**"
-        )
+        if is_admin:
+            welcome_text = (
+                "🛡️ **ផ្ទាំងបញ្ជា SUPREME FENG SHUI AGI - SUPER ADMIN** 🛡️\n"
+                "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                f"👑 **សូមស្វាគមន៍លោកមេការ:** `{from_user.full_name}` (ID: `{from_user.id}`)\n"
+                "🏷️ **សិទ្ធិ:** **Super Admin (Master Authority - គ្មានដែនកំណត់)**\n\n"
+                "ប្រព័ន្ធកំពុងដំណើរការពេញលេញ ២៤/៧ ជាមួយ ៧ សសរស្តម្ភ Matrix & Gemini 82-Key Omni Mesh!\n\n"
+                "👇 **សូមជ្រើសរើសមុខងារគ្រប់គ្រង ឬសាកល្បង AGI ខាងក្រោម៖**"
+            )
+        elif is_vip:
+            tier_badges = {
+                "monthly": "🌟 VIP ប្រចាំខែ (Monthly VIP)",
+                "yearly": "👑 VIP ប្រចាំឆ្នាំ (Yearly VIP)",
+                "lifetime": "💎 VIP មួយជីវិត (Lifetime VIP)"
+            }
+            badge = tier_badges.get(user.get("vip_tier"), "👑 VIP Member")
+            expiry_info = f"• 📅 ផុតកំណត់: `{user.get('vip_expiry', 'Lifetime')[:10]}`"
+            welcome_text = (
+                "🌟 **SUPREME FENG SHUI AGI SYSTEM (Master Level v1.0.0)** 🌟\n"
+                "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                f"👤 **សូមស្វាគមន៍:** `{from_user.full_name}` (ID: `{from_user.id}`)\n"
+                f"🏷️ **កម្រិតសមាជិកភាព:** **{badge}**\n"
+                f"{expiry_info}\n"
+                "✨ **សិទ្ធិរបស់អ្នក:** ប្រើប្រាស់មុខងារទាំងអស់បាន **គ្មានដែនកំណត់ 24/7/365**!\n\n"
+                "👇 **សូមជ្រើសរើសមុខងារដែលអ្នកចង់ប្រើប្រាស់ខាងក្រោម៖**"
+            )
+        else:
+            # Gated Compelling Welcome Message for Free/New Users
+            welcome_text = (
+                "🌟 **SUPREME FENG SHUI AGI SYSTEM (Master Level v1.0.0)** 🌟\n"
+                "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                "👋 **សូមស្វាគមន៍មកកាន់កំពូលប្រព័ន្ធបញ្ញាសិប្បនិម្មិតហុងស៊ុយបុរាណ AGI កម្រិតពិភពលោក!**\n\n"
+                f"👤 **គណនីរបស់អ្នក:** `{from_user.full_name}` (ID: `{from_user.id}`)\n"
+                "🏷️ **ស្ថានភាពគណនី:** 🔒 **មិនទាន់ភ្ជាប់ VIP (Locked)**\n\n"
+                "💎 **ហេតុអ្វីបានជាលោកអ្នកត្រូវភ្ជាប់ SUPREME FENG SHUI VIP?**\n"
+                "• 🧠 **គ្រូហុងស៊ុយ AI ឆ្លាតវៃបំផុត**: សួរពិគ្រោះយោបល់គ្រប់សំណួរ ២៤/៧/៣៦៥ គ្មានដែនកំណត់\n"
+                "• 📚 **រៀនក្បួនបុរាណ ១,០០០ មេរៀន**: ពីកម្រិតដំបូងរហូតដល់ Master កំពូល (១០០ ប្រធានបទ)\n"
+                "• 🧭 **ក្បួនគណិតវិទ្យាហុងស៊ុយ ០ កំហុស**: គណនា Life Gua, តារាហោះ យុគ ៩, BaZi ៤ សសរ & ១០ Gods\n"
+                "• 📸 **សវនកម្មរូបភាព AI Vision**: ស្កេនរូបថតបន្ទប់/ផ្ទះ រក Sha Qi & វិធីកែខៃភ្លាមៗ\n"
+                "• 🎨 **ស្ទូឌីយោប្លង់ 3D 4K**: បង្កើតរូបភាពប្លង់ហុងស៊ុយ 3D 4K Photorealistic\n\n"
+                "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                "👉 **ដើម្បីបើកសិទ្ធិប្រើប្រាស់ពេញលេញ សូមទាក់ទង SUPER ADMIN ផ្ទាល់:**\n"
+                "👑 **Telegram Admin:** [@HemSinath](https://t.me/HemSinath)\n\n"
+                "🎟️ *ប្រសិនបើលោកអ្នកមានលេខកូដ Key រួចហើយ សូមចុចប៊ូតុង '🎟️ បញ្ចូល Key អាជ្ញាប័ណ្ណ' ខាងក្រោម!*"
+            )
+
         await self._safe_reply(update.message, welcome_text, reply_markup=self._get_main_keyboard(from_user.id))
 
     async def _notify_admin_new_user(self, context: ContextTypes.DEFAULT_TYPE, from_user, user_data: Dict[str, Any]):
@@ -205,7 +294,7 @@ class FengShuiTelegramBot:
             f"🌐 **Username:** {username_str}\n"
             f"🗣️ **ភាសាទូរស័ព្ទ:** `{lang_str}`\n"
             f"⏱️ **កាលបរិច្ឆេទ:** `{now_str}`\n"
-            f"🏷️ **កម្រិតបច្ចុប្បន្ន:** `✨ សមាជិកឥតគិតថ្លៃ (Free - {config.MAX_FREE_DAILY_QUERIES} សំណួរ/ថ្ងៃ)`\n\n"
+            f"🏷️ **ស្ថានភាព:** `🔒 គណនីថ្មីមិនទាន់ភ្ជាប់ VIP (Locked)`\n\n"
             f"📊 **ស្ថិតិប្រព័ន្ធសរុប (Live System Stats):**\n"
             f"• 👥 **អ្នកប្រើប្រាស់សរុប:** `{stats['total_users']}` នាក់\n"
             f"• 👑 **សមាជិក VIP សកម្ម:** `{stats['total_vips']}` នាក់\n\n"
@@ -646,7 +735,12 @@ class FengShuiTelegramBot:
         await self._safe_reply(update.message, help_text, reply_markup=self._get_main_keyboard(from_user.id))
 
     async def curriculum_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Handle /curriculum command."""
+        """Handle /curriculum command (VIP & Super Admin Only)."""
+        from_user = update.effective_user
+        if not self._is_vip_or_admin(from_user.id):
+            await self._send_vip_required_notice(update.message, from_user.id)
+            return
+
         cats = self.curriculum.get_categories()
         text = (
             "📚 **កម្មវិធីសិក្សាហុងស៊ុយបុរាណ ១០០ ប្រធានបទ & ១០០០ មេរៀន**\n"
@@ -669,7 +763,12 @@ class FengShuiTelegramBot:
         await self._safe_reply(update.message, text, reply_markup=InlineKeyboardMarkup(keyboard))
 
     async def learn_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Handle /learn <lesson_id> command."""
+        """Handle /learn <lesson_id> command (VIP & Super Admin Only)."""
+        from_user = update.effective_user
+        if not self._is_vip_or_admin(from_user.id):
+            await self._send_vip_required_notice(update.message, from_user.id)
+            return
+
         args = context.args
         if not args:
             await self._safe_reply(
@@ -742,7 +841,12 @@ class FengShuiTelegramBot:
             await self._safe_reply(message_or_query, text, reply_markup=reply_markup)
 
     async def gua_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Handle /gua command."""
+        """Handle /gua command (VIP & Super Admin Only)."""
+        from_user = update.effective_user
+        if not self._is_vip_or_admin(from_user.id):
+            await self._send_vip_required_notice(update.message, from_user.id)
+            return
+
         args = context.args
         if not args or len(args) < 1:
             text = (
@@ -791,7 +895,12 @@ class FengShuiTelegramBot:
             await self._safe_reply(update.message, f"❌ កំហុសក្នុងការគណនា៖ {str(e)}")
 
     async def flyingstars_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Handle /flyingstars command."""
+        """Handle /flyingstars command (VIP & Super Admin Only)."""
+        from_user = update.effective_user
+        if not self._is_vip_or_admin(from_user.id):
+            await self._send_vip_required_notice(update.message, from_user.id)
+            return
+
         year = 2024
         res = self.calc_engine.calculate_flying_stars(year)
         if res["success"]:
@@ -822,7 +931,11 @@ class FengShuiTelegramBot:
             await self._safe_reply(update.message, f"❌ កំហុស៖ {res.get('error')}")
 
     async def bazi_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Handle /bazi command."""
+        """Handle /bazi command (VIP & Super Admin Only)."""
+        from_user = update.effective_user
+        if not self._is_vip_or_admin(from_user.id):
+            await self._send_vip_required_notice(update.message, from_user.id)
+            return
         args = context.args
         if not args or len(args) < 1:
             text = (
@@ -866,7 +979,12 @@ class FengShuiTelegramBot:
             await self._safe_reply(update.message, f"❌ កំហុស៖ {res.get('error')}")
 
     async def predict_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Handle /predict command."""
+        """Handle /predict command (VIP & Super Admin Only)."""
+        from_user = update.effective_user
+        if not self._is_vip_or_admin(from_user.id):
+            await self._send_vip_required_notice(update.message, from_user.id)
+            return
+
         args = context.args
         if not args:
             today = datetime.now().strftime("%Y-%m-%d")
@@ -922,12 +1040,8 @@ class FengShuiTelegramBot:
         limit_check = self.db.check_and_increment_query(from_user.id, max_free_limit=config.MAX_FREE_DAILY_QUERIES)
 
         if not limit_check["allowed"]:
-            # Quota exceeded for free tier
-            keyboard = [
-                [InlineKeyboardButton("👑 ពិនិត្យកញ្ចប់ VIP & បញ្ចូល Key", callback_data="menu_vip")],
-                [InlineKeyboardButton("🎟️ របៀបបញ្ចូល Key", callback_data="vip_redeem_prompt")]
-            ]
-            await self._safe_reply(update.message, limit_check["message"], reply_markup=InlineKeyboardMarkup(keyboard))
+            # Strictly VIP only
+            await self._send_vip_required_notice(update.message, from_user.id)
             return
 
         await update.message.chat.send_action("typing")
@@ -937,12 +1051,7 @@ class FengShuiTelegramBot:
 
         # Footer info
         is_vip = limit_check.get("is_vip", False)
-        rem = limit_check.get("remaining", "")
-        footer = "\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-        if is_vip:
-            footer += "👑 *VIP Member: សិទ្ធិប្រើប្រាស់គ្មានដែនកំណត់ 24/7*"
-        else:
-            footer += f"✨ *សល់កូតាសួរឥតគិតថ្លៃថ្ងៃនេះ: {rem} ដង | វាយ /vip ដើម្បី Upgrade*"
+        footer = "\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n👑 *VIP Member: សិទ្ធិប្រើប្រាស់គ្មានដែនកំណត់ 24/7/365*"
 
         keyboard = [
             [
@@ -953,9 +1062,14 @@ class FengShuiTelegramBot:
         await self._safe_reply(update.message, response_text + footer, reply_markup=InlineKeyboardMarkup(keyboard))
 
     async def handle_photo(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Handle user uploaded photos for Instant Multimodal Feng Shui Vision Audit."""
+        """Handle user uploaded photos for Instant Multimodal Feng Shui Vision Audit (VIP Only)."""
         from_user = update.effective_user
         is_admin = from_user.id in config.ADMIN_USER_IDS
+
+        # VIP Check
+        if not self._is_vip_or_admin(from_user.id):
+            await self._send_vip_required_notice(update.message, from_user.id)
+            return
 
         # Rate limit check
         rate_ok, warn_msg = self.security.check_rate_limit(from_user.id, is_admin=is_admin)
@@ -963,14 +1077,10 @@ class FengShuiTelegramBot:
             await self._safe_reply(update.message, warn_msg)
             return
 
-        # VIP & Daily quota check
+        # Quota check
         limit_check = self.db.check_and_increment_query(from_user.id, max_free_limit=config.MAX_FREE_DAILY_QUERIES)
         if not limit_check["allowed"]:
-            keyboard = [
-                [InlineKeyboardButton("👑 ពិនិត្យកញ្ចប់ VIP & បញ្ចូល Key", callback_data="menu_vip")],
-                [InlineKeyboardButton("🎟️ របៀបបញ្ចូល Key", callback_data="vip_redeem_prompt")]
-            ]
-            await self._safe_reply(update.message, limit_check["message"], reply_markup=InlineKeyboardMarkup(keyboard))
+            await self._send_vip_required_notice(update.message, from_user.id)
             return
 
         await update.message.chat.send_action("typing")
@@ -1011,7 +1121,11 @@ class FengShuiTelegramBot:
             )
 
     async def render3d_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Handle /render3d command to generate and explore 3D 4K Feng Shui architectural spaces."""
+        """Handle /render3d command to generate and explore 3D 4K Feng Shui architectural spaces (VIP Only)."""
+        from_user = update.effective_user
+        if not self._is_vip_or_admin(from_user.id):
+            await self._send_vip_required_notice(update.message, from_user.id)
+            return
         await self._send_render3d_menu(update.message, is_edit=False)
 
     async def _send_render3d_menu(self, message_or_query, is_edit: bool = False):
@@ -1052,6 +1166,13 @@ class FengShuiTelegramBot:
         data = query.data
 
         try:
+            # Check VIP permissions for gated callback features
+            gated_prefixes = ("curr_", "render_", "calc_")
+            gated_exact = {"menu_curriculum", "menu_gua", "menu_flyingstars", "menu_bazi", "menu_predict", "menu_render3d", "menu_ask"}
+            if (data in gated_exact or any(data.startswith(p) for p in gated_prefixes)) and not self._is_vip_or_admin(from_user.id):
+                await self._send_vip_required_notice(query, from_user.id)
+                return
+
             # Navigation: Main Menu
             if data == "menu_main":
                 await self._safe_edit(
@@ -1077,27 +1198,41 @@ class FengShuiTelegramBot:
                     "• `/redeem FS-M-ABCD-1234` (សម្រាប់ VIP ប្រចាំខែ 30 ថ្ងៃ)\n"
                     "• `/redeem FS-Y-EFGH-5678` (សម្រាប់ VIP ប្រចាំឆ្នាំ 365 ថ្ងៃ)\n"
                     "• `/redeem FS-L-JKLM-9012` (សម្រាប់ VIP មួយជីវិត Lifetime)\n\n"
-                    "*(ប្រសិនបើលោកអ្នកមិនទាន់មាន Key ទេ សូមទាក់ទងមកកាន់ Super Admin ដើម្បីជាវ)*"
+                    "*(ប្រសិនបើលោកអ្នកមិនទាន់មាន Key ទេ សូមទាក់ទងមកកាន់ Super Admin @HemSinath ដើម្បីជាវ)*"
                 )
                 keyboard = [
+                    [InlineKeyboardButton("👑 ភ្ជាប់ VIP ឥឡូវនេះ (Admin @HemSinath)", url="https://t.me/HemSinath")],
                     [InlineKeyboardButton("👑 ត្រឡប់ទៅ VIP Portal", callback_data="menu_vip")],
                     [InlineKeyboardButton("🏠 ម៉ឺនុយដើម", callback_data="menu_main")]
                 ]
                 await self._safe_edit(query, prompt_text, reply_markup=InlineKeyboardMarkup(keyboard))
 
-            elif data == "vip_features":
+            elif data in ["vip_perks_info", "vip_features"]:
                 feat_text = (
-                    "💎 **សេវាកម្មពិសេសកម្រិត VIP ផ្តាច់មុខ (VIP Master Perks)**\n"
+                    "💎 **អត្ថប្រយោជន៍ដ៏មហិមារបស់សមាជិកភាព VIP (VIP Master Perks)** 💎\n"
                     "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-                    "1️⃣ ⚡ **សួរពិគ្រោះ AGI Master គ្មានដែនកំណត់:** ឆ្លើយតបរហ័សទាន់ចិត្ត ស៊ីជម្រៅ សូន្យកំហុស 24/7\n\n"
-                    "2️⃣ 🔮 **BaZi Destiny & 10 Gods:** វិភាគសសរស្តម្ភទាំង ៤, ធាតុឱសថ Yong Shen, វដ្តសំណាង ១០ ឆ្នាំ និងរបៀបកែប្រែរាសី\n\n"
-                    "3️⃣ 🌌 **តារាហោះ យុគ ៩ ពេញលេញ:** ក្បួន Zheng Shen / Ling Shen, វិធីស្រូបទ្រព្យតាមទិសទឹក និងភ្នំ 2024-2043\n\n"
-                    "4️⃣ 🗓️ **ក្បួនរើសថ្ងៃជ័យជាន់ខ្ពស់ Ze Ri:** ជ្រើសរើសម៉ោងជ័យ និងថ្ងៃហុងស៊ុយខ្ពស់បំផុត\n\n"
-                    "5️⃣ 📜 **របាយការណ៍សវនកម្ម Masterclass:** ទាញយក និងរៀនមេរៀនលម្អិតទាំង ១០០០ មេរៀន"
+                    "🌟 **ប្រព័ន្ធ SUPREME FENG SHUI AGI (Master Level v1.0.0)**\n\n"
+                    "1️⃣ 🧠 **សួរគ្រូហុងស៊ុយ AI គ្មានដែនកំណត់:**\n"
+                    "• ពិគ្រោះយោបល់គ្រប់សំណួរ ២៤/៧/៣៦៥ គ្មានកូតាកំណត់ ឆ្លើយតបលឿនបំផុត (< 1s)\n"
+                    "• ដំណើរការដោយ Google Gemini 2.0 Flash Omni Mesh & HuggingFace\n\n"
+                    "2️⃣ 📚 **កម្មវិធីសិក្សា ១,០០០ មេរៀនពេញលេញ:**\n"
+                    "• ចូលអានមេរៀនក្បួនបុរាណពិតៗ ១០០ ប្រធានបទ\n"
+                    "• ការពន្យល់ស៊ីជម្រៅដោយ AI Synthesis កម្រិត Master\n\n"
+                    "3️⃣ 🧭 **គណនាជោគជតា និងហុងស៊ុយ ០ កំហុស:**\n"
+                    "• គណនា Life Gua (ទិសល្អ/អាក្រក់ តាមថ្ងៃខែឆ្នាំកំណើត)\n"
+                    "• តារាហោះ យុគ ៩ (Luo Shu Nine Palaces 2024-2043)\n"
+                    "• វិភាគ BaZi ៤ សសរ និងអាទិទេពទាំង ១០ (10 Gods)\n\n"
+                    "4️⃣ 📸 **សវនកម្មរូបភាព AI Vision:**\n"
+                    "• ផ្ញើរូបថតបន្ទប់/ផ្ទះដើម្បីពិនិត្យរកចំណុចទាស់ និងវិធីកែខៃ\n\n"
+                    "5️⃣ 🎨 **ស្ទូឌីយោប្លង់ 3D 4K Photorealistic:**\n"
+                    "• បង្កើតរូបភាពប្លង់ 3D 4K Ultra-HD រៀបចំត្រូវតាមក្បួនយុគ ៩\n\n"
+                    "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                    "👉 **សូមទាក់ទងមកកាន់ SUPER ADMIN ផ្ទាល់ដើម្បីភ្ជាប់សេវាកម្ម VIP:**\n"
+                    "👑 **Telegram Admin:** [@HemSinath](https://t.me/HemSinath)"
                 )
                 keyboard = [
+                    [InlineKeyboardButton("👑 ភ្ជាប់ VIP ឥឡូវនេះ (Admin @HemSinath)", url="https://t.me/HemSinath")],
                     [InlineKeyboardButton("🎟️ របៀបបញ្ចូល Key", callback_data="vip_redeem_prompt")],
-                    [InlineKeyboardButton("👑 ត្រឡប់ទៅ VIP Portal", callback_data="menu_vip")],
                     [InlineKeyboardButton("🏠 ម៉ឺនុយដើម", callback_data="menu_main")]
                 ]
                 await self._safe_edit(query, feat_text, reply_markup=InlineKeyboardMarkup(keyboard))

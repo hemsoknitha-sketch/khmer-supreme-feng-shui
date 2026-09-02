@@ -77,7 +77,7 @@ class SystemConfig:
     MAX_RAM_MB: int = int(os.getenv("MAX_RAM_MB", "800"))
     ENABLE_LOCAL_CACHE: bool = os.getenv("ENABLE_LOCAL_CACHE", "true").lower() == "true"
     CACHE_EXPIRATION_HOURS: int = 24
-    MAX_FREE_DAILY_QUERIES: int = int(os.getenv("MAX_FREE_DAILY_QUERIES", "5"))
+    MAX_FREE_DAILY_QUERIES: int = int(os.getenv("MAX_FREE_DAILY_QUERIES", "0"))
 
     # Feng Shui Classical Knowledge Constants
     FENGSHUI_SCHOOLS: List[str] = [
