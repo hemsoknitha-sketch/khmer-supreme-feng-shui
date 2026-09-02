@@ -46,6 +46,8 @@ class FengShuiTelegramBot:
 
     async def _safe_reply(self, message, text: str, reply_markup=None):
         """Safely send markdown text, automatically falling back to plain text if parsing fails."""
+        if len(text) > 4000:
+            text = text[:3950] + "\n\n...(ចុចប៊ូតុងខាងក្រោមដើម្បីអានបន្ត)..."
         try:
             return await message.reply_text(text, reply_markup=reply_markup, parse_mode="Markdown")
         except Exception as e:
@@ -54,6 +56,8 @@ class FengShuiTelegramBot:
 
     async def _safe_edit(self, query, text: str, reply_markup=None):
         """Safely edit message text, automatically falling back to plain text if parsing fails."""
+        if len(text) > 4000:
+            text = text[:3950] + "\n\n...(ចុចប៊ូតុងខាងក្រោមដើម្បីអានបន្ត)..."
         try:
             return await query.edit_message_text(text, reply_markup=reply_markup, parse_mode="Markdown")
         except Exception as e:
