@@ -350,3 +350,22 @@ def generate_admin_keys(req: GenKeysRequest):
     from database.db_manager import db_manager
     keys = db_manager.generate_license_key(tier=req.tier, count=req.count, created_by=req.admin_id)
     return {"success": True, "tier": req.tier, "count": len(keys), "keys": keys}
+
+
+# =============================================================================
+# Pillar 1 Vision & 3D 4K Render Endpoints
+# =============================================================================
+class Vision3DRequest(BaseModel):
+    space_type: str = Field(default="living_room", example="living_room")
+    facing_direction: str = Field(default="South (Period 9 Li Fire)", example="South (Period 9 Li Fire)")
+    style: str = Field(default="modern_luxury_fengshui", example="modern_luxury_fengshui")
+
+
+@app.post("/api/vision/render3d")
+@app.get("/api/vision/render3d")
+def get_3d_render_spec(space_type: str = "living_room", style: str = "modern_luxury_fengshui"):
+    """Generate 3D 4K photorealistic architectural prompt and direct render stream URL."""
+    from engines.vision_3d_engine import vision_3d_engine
+    res = vision_3d_engine.generate_3d_render_prompt(space_type=space_type, style=style)
+    return {"success": True, "data": res}
+

@@ -29,6 +29,7 @@ from engines.classical_calc import ClassicalCalcEngine
 from engines.alert_predictor import AlertPredictionEngine
 from engines.curriculum_engine import curriculum_engine
 from engines.security_guard import security_guard
+from engines.vision_3d_engine import vision_3d_engine
 from database.db_manager import db_manager
 
 logger = logging.getLogger("SupremeFengShui.TelegramBot")
@@ -44,6 +45,7 @@ class FengShuiTelegramBot:
     - VIP Membership & License Key Redemption System (Monthly, Yearly, Lifetime)
     - Super Admin Management Panel & License Generator
     - High-Precision Classical Calculations (Life Gua, Flying Stars, BaZi, Fortune Alerts)
+    - Multimodal Vision Audit & 3D 4K Architectural Generation (Pillar 1 Vision)
     - Enterprise Security Shield (Anti-Spam, Prompt Injection Guard, Secret Redaction)
     """
 
@@ -55,6 +57,7 @@ class FengShuiTelegramBot:
         self.curriculum = curriculum_engine
         self.db = db_manager
         self.security = security_guard
+        self.vision = vision_3d_engine
 
     async def _safe_reply(self, message, text: str, reply_markup=None):
         """Safely send markdown text, automatically redacting secrets, falling back to plain text, and guarding max length."""
@@ -102,11 +105,14 @@ class FengShuiTelegramBot:
                 InlineKeyboardButton("📊 ទស្សន៍ទាយសំណាង", callback_data="menu_predict")
             ],
             [
-                InlineKeyboardButton("👑 ផតថល VIP & អាជ្ញាប័ណ្ណ", callback_data="menu_vip"),
+                InlineKeyboardButton("🎨 បង្កើតប្លង់ 3D 4K", callback_data="menu_render3d"),
                 InlineKeyboardButton("💬 សួរគ្រូហុងស៊ុយ AI", callback_data="menu_ask")
             ],
             [
-                InlineKeyboardButton("⚡ ស្ថានភាពប្រព័ន្ធ (Health)", callback_data="menu_health"),
+                InlineKeyboardButton("👑 ផតថល VIP & អាជ្ញាប័ណ្ណ", callback_data="menu_vip"),
+                InlineKeyboardButton("⚡ ស្ថានភាពប្រព័ន្ធ", callback_data="menu_health")
+            ],
+            [
                 InlineKeyboardButton("❓ ជំនួយ (Help)", callback_data="menu_help")
             ]
         ]
@@ -122,6 +128,7 @@ class FengShuiTelegramBot:
         """Register native command menu button in Telegram UI."""
         commands = [
             BotCommand("start", "🌟 ផ្ទាំងដើម & ម៉ឺនុយបញ្ជា (Main Dashboard)"),
+            BotCommand("render3d", "🎨 បង្កើតប្លង់ 3D 4K & ពិនិត្យរូបភាព"),
             BotCommand("health", "⚡ ត្រួតពិនិត្យសុខភាព VPS, CPU, RAM, Disk, AI"),
             BotCommand("vip", "👑 ស្ថានភាព VIP & បញ្ចូល Key អាជ្ញាប័ណ្ណ"),
             BotCommand("redeem", "🎟️ បញ្ចូល Key (ឧ. /redeem FS-M-XXXX-XXXX)"),
@@ -894,6 +901,94 @@ class FengShuiTelegramBot:
         ]
         await self._safe_reply(update.message, response_text + footer, reply_markup=InlineKeyboardMarkup(keyboard))
 
+    async def handle_photo(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Handle user uploaded photos for Instant Multimodal Feng Shui Vision Audit."""
+        from_user = update.effective_user
+        is_admin = from_user.id in config.ADMIN_USER_IDS
+
+        # Rate limit check
+        rate_ok, warn_msg = self.security.check_rate_limit(from_user.id, is_admin=is_admin)
+        if not rate_ok:
+            await self._safe_reply(update.message, warn_msg)
+            return
+
+        # VIP & Daily quota check
+        limit_check = self.db.check_and_increment_query(from_user.id, max_free_limit=config.MAX_FREE_DAILY_QUERIES)
+        if not limit_check["allowed"]:
+            keyboard = [
+                [InlineKeyboardButton("👑 ពិនិត្យកញ្ចប់ VIP & បញ្ចូល Key", callback_data="menu_vip")],
+                [InlineKeyboardButton("🎟️ របៀបបញ្ចូល Key", callback_data="vip_redeem_prompt")]
+            ]
+            await self._safe_reply(update.message, limit_check["message"], reply_markup=InlineKeyboardMarkup(keyboard))
+            return
+
+        await update.message.chat.send_action("typing")
+
+        try:
+            photo = update.message.photo[-1]
+            photo_file = await context.bot.get_file(photo.file_id)
+            photo_bytes = await photo_file.download_as_bytearray()
+            caption = update.message.caption or ""
+
+            audit_res = self.vision.audit_image(
+                image_bytes=bytes(photo_bytes),
+                mime_type="image/jpeg",
+                user_notes=caption
+            )
+
+            report = (
+                "👁️ **លទ្ធផលសវនកម្មរូបភាពហុងស៊ុយ (Vision Multimodal Audit)** 👁️\n"
+                "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                f"{audit_res.get('audit_report', '')}"
+            )
+
+            keyboard = [
+                [
+                    InlineKeyboardButton("🎨 បង្កើតប្លង់ 3D 4K គំរូ", callback_data="menu_render3d"),
+                    InlineKeyboardButton("💬 សួរគ្រូ AI បន្ថែម", callback_data="menu_ask")
+                ],
+                [
+                    InlineKeyboardButton("🏠 ម៉ឺនុយដើម", callback_data="menu_main")
+                ]
+            ]
+            await self._safe_reply(update.message, report, reply_markup=InlineKeyboardMarkup(keyboard))
+        except Exception as e:
+            logger.error(f"Error handling photo upload: {e}", exc_info=True)
+            await self._safe_reply(
+                update.message,
+                f"❌ មានបញ្ហាក្នុងការទាញយករូបភាព៖ {e}\n👉 សូមព្យាយាមផ្ញើរូបភាពម្តងទៀត។"
+            )
+
+    async def render3d_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Handle /render3d command to generate and explore 3D 4K Feng Shui architectural spaces."""
+        await self._send_render3d_menu(update.message, is_edit=False)
+
+    async def _send_render3d_menu(self, message_or_query, is_edit: bool = False):
+        """Render the 3D 4K Visualization menu."""
+        text = (
+            "🎨 **ស្ទូឌីយោបង្កើតប្លង់ហុងស៊ុយ 3D 4K (3D Architectural Visualizer)** 🎨\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "បច្ចេកវិទ្យាបង្កើតរូបភាព 3D 4K យោងតាមក្បួនខ្នាត San Yuan Xuan Kong យុគ ៩ (Period 9 Li Fire) ពិតប្រាកដ!\n\n"
+            "👇 **សូមជ្រើសរើសប្រភេទលំហអាកាសដែលអ្នកចង់ Render 3D 4K៖**"
+        )
+        keyboard = [
+            [
+                InlineKeyboardButton("🛋️ បន្ទប់ទទួលភ្ញៀវយុគ ៩", callback_data="render_living"),
+                InlineKeyboardButton("🛏️ បន្ទប់គេងមេគ្រួសារ", callback_data="render_bedroom")
+            ],
+            [
+                InlineKeyboardButton("💼 ការិយាល័យថ្នាក់ដឹកនាំ", callback_data="render_office"),
+                InlineKeyboardButton("🏡 ភូមិគ្រឹះ & វីឡាហុងស៊ុយ", callback_data="render_villa")
+            ],
+            [
+                InlineKeyboardButton("🏠 ម៉ឺនុយដើម", callback_data="menu_main")
+            ]
+        ]
+        if is_edit:
+            await self._safe_edit(message_or_query, text, reply_markup=InlineKeyboardMarkup(keyboard))
+        else:
+            await self._safe_reply(message_or_query, text, reply_markup=InlineKeyboardMarkup(keyboard))
+
     async def button_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle all interactive inline keyboard clicks seamlessly."""
         query = update.callback_query
@@ -1283,6 +1378,48 @@ class FengShuiTelegramBot:
                     "• *ផ្ទះបែរមុខទៅទិសខាងត្បូង ១៨០ ដឺក្រេ តើល្អដែរឬទេ?*",
                     reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🏠 ម៉ឺនុយដើម", callback_data="menu_main")]])
                 )
+            elif data == "menu_render3d":
+                await self._send_render3d_menu(query, is_edit=True)
+            elif data in ["render_living", "render_bedroom", "render_office", "render_villa"]:
+                space_map = {
+                    "render_living": ("living_room", "🛋️ បន្ទប់ទទួលភ្ញៀវយុគ ៩ (Living Room)"),
+                    "render_bedroom": ("bedroom", "🛏️ បន្ទប់គេងមេគ្រួសារ (Master Bedroom)"),
+                    "render_office": ("office", "💼 ការិយាល័យថ្នាក់ដឹកនាំ (Executive Office)"),
+                    "render_villa": ("exterior_house", "🏡 ភូមិគ្រឹះ & វីឡាហុងស៊ុយ (Feng Shui Villa)")
+                }
+                space_key, space_title = space_map[data]
+                render_data = self.vision.generate_3d_render_prompt(space_type=space_key)
+
+                caption = (
+                    f"🎨 **ប្លង់ហុងស៊ុយ 3D 4K៖ {space_title}**\n"
+                    "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                    f"• **ក្បួនខ្នាត:** San Yuan Period 9 Li Fire (2024-2043)\n"
+                    f"• **គុណភាពបង្ហាញ:** 4K Ultra-HD Photorealistic Render\n"
+                    f"• **លក្ខណៈពិសេស:** {render_data['fengshui_specifications']['bright_hall']}, "
+                    f"{render_data['fengshui_specifications']['water_placement']}\n\n"
+                    f"🖼️ [ចុចទីនេះដើម្បីទាញយករូបភាព 4K ពេញលេញ]({render_data['image_4k_url']})"
+                )
+
+                keyboard = [
+                    [
+                        InlineKeyboardButton("🔄 បង្កើតប្លង់ផ្សេងទៀត", callback_data="menu_render3d"),
+                        InlineKeyboardButton("💬 សួរពិគ្រោះ AI", callback_data="menu_ask")
+                    ],
+                    [
+                        InlineKeyboardButton("🏠 ម៉ឺនុយដើម", callback_data="menu_main")
+                    ]
+                ]
+
+                try:
+                    await query.message.reply_photo(
+                        photo=render_data['image_4k_url'],
+                        caption=caption,
+                        parse_mode="Markdown",
+                        reply_markup=InlineKeyboardMarkup(keyboard)
+                    )
+                except Exception:
+                    await self._safe_edit(query, caption, reply_markup=InlineKeyboardMarkup(keyboard))
+
             elif data == "menu_health":
                 await self.health_command(update, context)
             elif data == "menu_help":
@@ -1314,6 +1451,8 @@ class FengShuiTelegramBot:
 
             # Commands
             app.add_handler(CommandHandler("start", self.start_command))
+            app.add_handler(CommandHandler("render3d", self.render3d_command))
+            app.add_handler(CommandHandler("visualize", self.render3d_command))
             app.add_handler(CommandHandler("health", self.health_command))
             app.add_handler(CommandHandler("vip", self.vip_command))
             app.add_handler(CommandHandler("redeem", self.redeem_command))
@@ -1332,6 +1471,7 @@ class FengShuiTelegramBot:
 
             # Callbacks & Messages
             app.add_handler(CallbackQueryHandler(self.button_callback))
+            app.add_handler(MessageHandler(filters.PHOTO, self.handle_photo))
             app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, self.handle_message))
 
             logger.info("Telegram Bot polling started successfully with bulletproof resilience.")
