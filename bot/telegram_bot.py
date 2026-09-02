@@ -1,21 +1,24 @@
 """
 Telegram Bot for Supreme Feng Shui AGI System
 Asynchronous, lightweight, and interactive bot powered by FS-Supreme-Master.
+Features persistent native commands menu, full inline interactive keyboards,
+and an interactive 100-Topic & 1,000-Lesson Curriculum Learning Center.
 Runs 24/7 on Google Cloud VPS 1GB RAM.
 """
 
 import logging
 import asyncio
-from typing import Dict, Any
+from typing import Dict, Any, List
 from datetime import datetime
 
 from config import config
 from engines.supreme_master import SupremeFengShuiMaster
 from engines.classical_calc import ClassicalCalcEngine
 from engines.alert_predictor import AlertPredictionEngine
+from engines.curriculum_engine import curriculum_engine
 
 try:
-    from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+    from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, BotCommand
     from telegram.ext import (
         Application,
         CommandHandler,
@@ -24,8 +27,6 @@ try:
         filters,
         ContextTypes
     )
-    from apscheduler.schedulers.asyncio import AsyncIOScheduler
-    from apscheduler.triggers.cron import CronTrigger
     TELEGRAM_AVAILABLE = True
 except ImportError:
     TELEGRAM_AVAILABLE = False
@@ -34,74 +35,207 @@ logger = logging.getLogger("SupremeFengShui.TelegramBot")
 
 
 class FengShuiTelegramBot:
-    """Production Telegram Bot for Supreme Feng Shui System."""
+    """Production Super Smart Telegram Bot for Supreme Feng Shui System."""
 
     def __init__(self, token: str = None):
         self.token = token or config.TELEGRAM_BOT_TOKEN
         self.master = SupremeFengShuiMaster()
         self.calc_engine = ClassicalCalcEngine()
         self.alert_engine = AlertPredictionEngine()
-        self.scheduler = AsyncIOScheduler() if TELEGRAM_AVAILABLE else None
+        self.curriculum = curriculum_engine
 
-    async def start_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Handle /start command with interactive menu."""
-        welcome_text = (
-            "🌟 **សូមស្វាគមន៍មកកាន់ Supreme Feng Shui AGI System** 🌟\n\n"
-            "ខ្ញុំជា **បរមគ្រូហុងស៊ុយ AI កម្រិតកំពូល** ដែលដំណើរការដោយបច្ចេកវិទ្យា MoE Intelligence Matrix:\n"
-            "• **FS-Boramey-7B**: បង្រៀន និងឆ្លើយសំណួរក្បួនហុងស៊ុយ\n"
-            "• **FS-Reasoner-7B**: វិភាគក្បួនស៊ីជម្រៅ CoT\n"
-            "• **FS-Classical-Calc-v1**: គណនាលេខក្បួនសូន្យកំហុស\n"
-            "• **FS-Alert-Predictor**: ទស្សន៍ទាយជោគជតារាសីប្រចាំថ្ងៃ\n\n"
-            "📋 **បញ្ជីពាក្យបញ្ជាសំខាន់ៗ:**\n"
-            "👉 `/gua <ឆ្នាំកំណើត> <ភេទ m/f>` - គណនា Life Gua & ទិសល្អ\n"
-            "👉 `/flyingstars` - មើលតារាហោះឆ្នាំ ២០២៤ យុគ ៩\n"
-            "👉 `/bazi <YYYY-MM-DD> <HH:MM>` - វិភាគសសរស្តម្ភទាំង ៤\n"
-            "👉 `/predict <YYYY-MM-DD>` - ទស្សន៍ទាយសំណាងប្រចាំថ្ងៃ\n"
-            "👉 `/ask <សំណួរ>` - សួរសំណួរហុងស៊ុយណាមួយក៏បាន\n"
-            "👉 `/help` - ជំនួយបន្ថែម"
-        )
-
+    def _get_main_keyboard(self) -> InlineKeyboardMarkup:
+        """Construct the rich main dashboard interactive keyboard."""
         keyboard = [
             [
-                InlineKeyboardButton("🔢 គណនា Life Gua", callback_data="menu_gua"),
+                InlineKeyboardButton("📚 កម្មវិធីសិក្សា ១០០០ មេរៀន", callback_data="menu_curriculum")
+            ],
+            [
+                InlineKeyboardButton("🧭 គណនា Life Gua", callback_data="menu_gua"),
                 InlineKeyboardButton("🌌 តារាហោះ យុគ ៩", callback_data="menu_flyingstars")
             ],
             [
-                InlineKeyboardButton("🔮 វិភាគ BaZi", callback_data="menu_bazi"),
+                InlineKeyboardButton("🔮 វិភាគ BaZi ៤ សសរ", callback_data="menu_bazi"),
                 InlineKeyboardButton("📊 ទស្សន៍ទាយសំណាង", callback_data="menu_predict")
             ],
             [
-                InlineKeyboardButton("📚 កម្មវិធីសិក្សាហុងស៊ុយ", callback_data="menu_curriculum")
+                InlineKeyboardButton("💬 សួរគ្រូហុងស៊ុយ AI", callback_data="menu_ask"),
+                InlineKeyboardButton("❓ ជំនួយ (Help)", callback_data="menu_help")
             ]
         ]
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        await update.message.reply_text(welcome_text, reply_markup=reply_markup, parse_mode="Markdown")
+        return InlineKeyboardMarkup(keyboard)
+
+    async def post_init(self, application: Application) -> None:
+        """Register native command menu button in Telegram UI."""
+        commands = [
+            BotCommand("start", "🌟 ផ្ទាំងដើម & ម៉ឺនុយបញ្ជា (Main Dashboard)"),
+            BotCommand("curriculum", "📚 កម្មវិធីសិក្សា ១០០ ប្រធានបទ & ១០០០ មេរៀន"),
+            BotCommand("learn", "📖 រៀនមេរៀនជាក់លាក់ (ឧ. /learn 1)"),
+            BotCommand("gua", "🧭 គណនា Life Gua (ឧ. /gua 1988 male)"),
+            BotCommand("flyingstars", "🌌 តារាហោះ ៩ វិហារ យុគ ៩"),
+            BotCommand("bazi", "🔮 វិភាគ BaZi (ឧ. /bazi 1988-05-15 10:30)"),
+            BotCommand("predict", "📊 ទស្សន៍ទាយសំណាង (ឧ. /predict 1988-05-15)"),
+            BotCommand("ask", "🧠 ពិគ្រោះយោបល់ជាមួយ FS-Supreme-Master AI"),
+            BotCommand("help", "❓ សៀវភៅណែនាំប្រើប្រាស់")
+        ]
+        try:
+            await application.bot.set_my_commands(commands)
+            logger.info("Native Telegram Bot Commands registered successfully.")
+        except Exception as e:
+            logger.warning(f"Could not register Telegram Bot commands: {e}")
+
+    async def start_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Handle /start command with rich interactive dashboard."""
+        welcome_text = (
+            "🌟 **SUPREME FENG SHUI AGI SYSTEM (Master Level v1.0.0)** 🌟\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "សូមស្វាគមន៍មកកាន់ប្រព័ន្ធបញ្ញាសិប្បនិម្មិតហុងស៊ុយកំពូល ដែលរួមបញ្ចូលគ្នានូវ **៧ សសរស្តម្ភស្នូល** និង **កម្មវិធីសិក្សា ១០០០ មេរៀន** តាមក្បួនបុរាណពិតប្រាកដ!\n\n"
+            "⚡ **សមត្ថភាពស្នូលរបស់ប្រព័ន្ធ:**\n"
+            "• 📚 **1,000 Lessons Curriculum**: មេរៀនក្បួនហុងស៊ុយ ១០០០ មេរៀនលម្អិត\n"
+            "• 🧠 **FS-Supreme-Master AI**: ម៉ូដែលឆ្លើយតប និងវែកញែកកម្រិតខ្ពស់\n"
+            "• 🧭 **FS-Classical-Calc**: គណនា Life Gua, Flying Stars, BaZi សូន្យកំហុស\n"
+            "• 📊 **FS-Alert-Predictor**: ទស្សន៍ទាយជោគជតារាសីប្រចាំថ្ងៃ 0-100%\n\n"
+            "👇 **សូមចុចប៊ូតុងខាងក្រោមដើម្បីចាប់ផ្តើមប្រើប្រាស់ភ្លាមៗ:**"
+        )
+        await update.message.reply_text(
+            welcome_text,
+            reply_markup=self._get_main_keyboard(),
+            parse_mode="Markdown"
+        )
 
     async def help_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /help command."""
         help_text = (
-            "📖 **សៀវភៅណែនាំពាក្យបញ្ជា (Help Guide):**\n\n"
-            "1️⃣ **គណនា Life Gua:**\n"
-            "ឧទាហរណ៍៖ `/gua 1988 male` ឬ `/gua 1995 female`\n\n"
-            "2️⃣ **គណនា BaZi (Four Pillars):**\n"
-            "ឧទាហរណ៍៖ `/bazi 1990-05-20 08:30`\n\n"
-            "3️⃣ **ទស្សន៍ទាយសំណាងប្រចាំថ្ងៃ:**\n"
-            "ឧទាហរណ៍៖ `/predict 1988-08-15`\n\n"
-            "4️⃣ **សួរការរៀបចំផ្ទះ ឬការិយាល័យ:**\n"
-            "ឧទាហរណ៍៖ `/ask តើខ្ញុំគួររៀបចំបន្ទប់គេងយ៉ាងដូចម្តេចក្នុងយុគទី ៩?`"
+            "📖 **របៀបប្រើប្រាស់ពាក្យបញ្ជា (Command Guide):**\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "1️⃣ **រៀនសូត្រមេរៀន:**\n"
+            "• `/curriculum` - បើកកម្មវិធីសិក្សា ១០០ ប្រធានបទ\n"
+            "• `/learn 1` - អានមេរៀនទី ១ (រហូតដល់ ១០០០)\n\n"
+            "2️⃣ **គណនា Life Gua & ទិសល្អ/អាក្រក់:**\n"
+            "• `/gua 1988 male` ឬ `/gua 1995 female`\n\n"
+            "3️⃣ **តារាហោះ ៩ វិហារ យុគ ៩:**\n"
+            "• `/flyingstars`\n\n"
+            "4️⃣ **វិភាគ BaZi សសរស្តម្ភទាំង ៤:**\n"
+            "• `/bazi 1988-05-15 10:30`\n\n"
+            "5️⃣ **ទស្សន៍ទាយសំណាងប្រចាំថ្ងៃ:**\n"
+            "• `/predict 1988-05-15`\n\n"
+            "6️⃣ **ពិគ្រោះយោបល់ជាមួយ AI Master:**\n"
+            "• `/ask តើខ្ញុំគួររៀបចំបន្ទប់គេង និងតុធ្វើការយ៉ាងណាដើម្បីបង្កើនទ្រព្យ?`"
         )
-        await update.message.reply_text(help_text, parse_mode="Markdown")
+        await update.message.reply_text(help_text, reply_markup=self._get_main_keyboard(), parse_mode="Markdown")
+
+    async def curriculum_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Handle /curriculum command."""
+        cats = self.curriculum.get_categories()
+        text = (
+            "📚 **កម្មវិធីសិក្សាហុងស៊ុយបុរាណ ១០០ ប្រធានបទ & ១០០០ មេរៀន**\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "រៀបចំយ៉ាងហ្មត់ចត់តាមក្បួនគណិតវិទ្យាហុងស៊ុយបុរាណពិតប្រាកដ ចែកចេញជា ៤ ផ្នែកធំៗ៖\n\n"
+            "☯️ **ផ្នែកទី ១:** មូលដ្ឋានគ្រឹះក្បួនហុងស៊ុយបុរាណ (មេរៀន ១-២០០)\n"
+            "🌌 **ផ្នែកទី ២:** ក្បួនជឿនលឿន & តារាហោះ យុគ ៩ (មេរៀន ២០១-៥០០)\n"
+            "🏛️ **ផ្នែកទី ៣:** ការអនុវត្តជាក់ស្តែង & លំនៅឋាន/អាជីវកម្ម (មេរៀន ៥០១-៨០០)\n"
+            "🔮 **ផ្នែកទី ៤:** ក្បួនឯកទេសជាន់ខ្ពស់ & BaZi រាសី (មេរៀន ៨០១-១០០០)\n\n"
+            "👇 **សូមជ្រើសរើសផ្នែកដែលអ្នកចង់សិក្សា៖**"
+        )
+        keyboard = [
+            [InlineKeyboardButton(f"{c['icon']} {c['name_kh']}", callback_data=f"curr_cat_{c['id']}_p1")]
+            for c in cats
+        ]
+        keyboard.append([
+            InlineKeyboardButton("📖 រៀនមេរៀនទី ១ ភ្លាមៗ", callback_data="curr_les_1"),
+            InlineKeyboardButton("🏠 ម៉ឺនុយដើម", callback_data="menu_main")
+        ])
+        await update.message.reply_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="Markdown")
+
+    async def learn_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Handle /learn <lesson_id> command."""
+        args = context.args
+        if not args:
+            await update.message.reply_text(
+                "⚠️ សូមបញ្ជាក់លេខមេរៀនពី ១ ដល់ ១០០០ (ឧទាហរណ៍៖ `/learn 1` ឬ `/learn 23`)",
+                parse_mode="Markdown"
+            )
+            return
+
+        try:
+            lesson_id = int(args[0])
+            await self._send_lesson_view(update.message, lesson_id)
+        except ValueError:
+            await update.message.reply_text("❌ លេខមេរៀនមិនត្រឹមត្រូវ។ សូមបញ្ចូលលេខពី ១ ដល់ ១០០០។")
+
+    async def _send_lesson_view(self, message_or_query, lesson_id: int, is_edit: bool = False):
+        """Render full lesson view with interactive Next/Previous and Deep Explain buttons."""
+        lesson = self.curriculum.get_lesson(lesson_id)
+        if not lesson:
+            text = f"❌ រកមិនឃើញមេរៀនទី {lesson_id} ឡើយ (មានត្រឹមមេរៀនទី ១ ដល់ ១០០០)។"
+            if is_edit:
+                await message_or_query.edit_message_text(text)
+            else:
+                await message_or_query.reply_text(text)
+            return
+
+        text = (
+            f"📚 **{lesson['title_kh']}**\n"
+            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            f"🏷️ **ផ្នែក:** {lesson['category_icon']} {lesson['category_name']}\n"
+            f"📌 **ប្រធានបទធំ:** {lesson['topic_title_kh']}\n"
+            f"🎯 **ប្រធានបទរង:** {lesson['sub_topic_kh']}\n\n"
+            f"📖 **១. ទ្រឹស្តី និងនិយមន័យក្បួន:**\n{lesson['classical_rule']}\n\n"
+            f"📐 **២. រូបមន្តគណិតវិទ្យាហុងស៊ុយ:**\n`{lesson['formula']}`\n\n"
+            f"💡 **៣. ការអនុវត្តជាក់ស្តែង & ដំណោះស្រាយ:**\n{lesson['practical_remedy']}\n\n"
+            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            f"🔢 *មេរៀន {lesson['lesson_id']}/1000 | យុគទី ៩ (Period 9: 2024-2043)*"
+        )
+
+        nav_row = []
+        if lesson["prev_lesson_id"]:
+            nav_row.append(InlineKeyboardButton("⬅️ ថយក្រោយ", callback_data=f"curr_les_{lesson['prev_lesson_id']}"))
+        if lesson["next_lesson_id"]:
+            nav_row.append(InlineKeyboardButton("➡️ បន្ទាប់ (Next)", callback_data=f"curr_les_{lesson['next_lesson_id']}"))
+
+        keyboard = []
+        if nav_row:
+            keyboard.append(nav_row)
+
+        keyboard.append([
+            InlineKeyboardButton("🧠 ពន្យល់លម្អិតជាមួយ AI Master", callback_data=f"curr_exp_{lesson['lesson_id']}")
+        ])
+        keyboard.append([
+            InlineKeyboardButton("📑 មេរៀនក្នុងប្រធានបទនេះ", callback_data=f"curr_top_{lesson['topic_id']}"),
+            InlineKeyboardButton("📚 ផ្នែកទាំង ៤", callback_data="menu_curriculum")
+        ])
+        keyboard.append([
+            InlineKeyboardButton("🏠 ម៉ឺនុយដើម (Main Menu)", callback_data="menu_main")
+        ])
+
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        if is_edit:
+            await message_or_query.edit_message_text(text, reply_markup=reply_markup, parse_mode="Markdown")
+        else:
+            await message_or_query.reply_text(text, reply_markup=reply_markup, parse_mode="Markdown")
 
     async def gua_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /gua command."""
         args = context.args
         if not args or len(args) < 1:
-            await update.message.reply_text("⚠️ សូមបញ្ជាក់ឆ្នាំកំណើត និងភេទ (ឧទាហរណ៍៖ `/gua 1988 male`)", parse_mode="Markdown")
+            text = (
+                "🧭 **របៀបគណនា Life Gua (San Yuan Ming Gua):**\n"
+                "សូមសរសេរ៖ `/gua <ឆ្នាំកំណើត> <ភេទ male/female>`\n"
+                "ឧទាហរណ៍៖ `/gua 1988 male` ឬ `/gua 1995 female`"
+            )
+            keyboard = [
+                [
+                    InlineKeyboardButton("👨 គណនាសម្រាប់បុរស (1988)", callback_data="calc_gua_1988_male"),
+                    InlineKeyboardButton("👩 គណនាសម្រាប់ស្ត្រី (1995)", callback_data="calc_gua_1995_female")
+                ],
+                [InlineKeyboardButton("🏠 ម៉ឺនុយដើម", callback_data="menu_main")]
+            ]
+            await update.message.reply_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="Markdown")
             return
 
         try:
             year = int(args[0])
-            gender = args[1] if len(args) > 1 else "male"
+            gender = args[1].lower() if len(args) > 1 else "male"
             res = self.calc_engine.calculate_life_gua(year, gender)
 
             if res["success"]:
@@ -110,15 +244,20 @@ class FengShuiTelegramBot:
                 unlucky_str = "\n".join([f"• **{item['direction']}** ({item['type']}): {item['meaning']}" for item in d['unlucky_directions']])
 
                 msg = (
-                    f"🧭 **លទ្ធផល Life Gua របស់អ្នក (FS-Classical-Calc-v1)**\n"
-                    f"━━━━━━━━━━━━━━━━━━━\n"
+                    f"🧭 **លទ្ធផល Life Gua (FS-Classical-Calc-v1)**\n"
+                    f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                    f"• **ឆ្នាំកំណើត:** {d['birth_year']} ({'បុរស' if d['gender'] == 'male' else 'ស្ត្រី'})\n"
                     f"• **Gua លេខ:** {d['gua_number']} ({d['trigram_name']})\n"
                     f"• **ធាតុ:** {d['element']}\n"
                     f"• **ក្រុម:** {d['group']}\n\n"
                     f"✨ **ទិសល្អទាំង ៤ (Auspicious Directions):**\n{lucky_str}\n\n"
                     f"⚠️ **ទិសគួរជៀសវាងទាំង ៤ (Inauspicious Directions):**\n{unlucky_str}"
                 )
-                await update.message.reply_text(msg, parse_mode="Markdown")
+                keyboard = [
+                    [InlineKeyboardButton("📚 រៀនក្បួន Life Gua (មេរៀន ១៧)", callback_data="curr_les_161")],
+                    [InlineKeyboardButton("🏠 ម៉ឺនុយដើម", callback_data="menu_main")]
+                ]
+                await update.message.reply_text(msg, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="Markdown")
             else:
                 await update.message.reply_text(f"❌ កំហុស៖ {res.get('error')}")
         except Exception as e:
@@ -132,8 +271,8 @@ class FengShuiTelegramBot:
             d = res["data"]
             grid = d["grid"]
             msg = (
-                f"🌌 **តារាហោះប្រចាំឆ្នាំ {year} (យុគទី {d['period']} ធាតុភ្លើង)**\n"
-                f"━━━━━━━━━━━━━━━━━━━\n"
+                f"🌌 **តារាហោះប្រចាំឆ្នាំ {year} (យុគទី {d['period']} ធាតុភ្លើង Li Fire)**\n"
+                f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
                 f"• **តារាកណ្តាល:** {d['annual_center_star']} (San Bi Wood)\n"
                 f"• **ទិសទ្រព្យធំ:** {d['wealth_palace']}\n\n"
                 f"📍 **ស្ថានភាពតារាទាំង ៩ វិហារ:**\n"
@@ -147,13 +286,26 @@ class FengShuiTelegramBot:
                 f"• **និរតី (SW):** តារា {grid['SW']['star_number']} ({grid['SW']['details'].get('kh')})\n\n"
                 f"💡 **ការបន្សាបគ្រោះ:** ដាក់កណ្តឹងខ្យល់លោហធាតុនៅទិសខាងលិច (តារា ៥ លឿង)។"
             )
-            await update.message.reply_text(msg, parse_mode="Markdown")
+            keyboard = [
+                [InlineKeyboardButton("📚 រៀនក្បួនតារាហោះ យុគ ៩", callback_data="curr_les_221")],
+                [InlineKeyboardButton("🏠 ម៉ឺនុយដើម", callback_data="menu_main")]
+            ]
+            await update.message.reply_text(msg, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="Markdown")
 
     async def bazi_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /bazi command."""
         args = context.args
         if not args:
-            await update.message.reply_text("⚠️ សូមបញ្ជាក់ថ្ងៃខែឆ្នាំកំណើត (ឧទាហរណ៍៖ `/bazi 1988-05-15 10:30`)", parse_mode="Markdown")
+            text = (
+                "🔮 **របៀបគណនា BaZi Four Pillars:**\n"
+                "សូមសរសេរ៖ `/bazi <YYYY-MM-DD> <HH:MM>`\n"
+                "ឧទាហរណ៍៖ `/bazi 1988-05-15 10:30`"
+            )
+            keyboard = [
+                [InlineKeyboardButton("🔮 តេស្ត BaZi (1988-05-15 10:30)", callback_data="calc_bazi_demo")],
+                [InlineKeyboardButton("🏠 ម៉ឺនុយដើម", callback_data="menu_main")]
+            ]
+            await update.message.reply_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="Markdown")
             return
 
         date_str = args[0]
@@ -165,7 +317,7 @@ class FengShuiTelegramBot:
             p = d["pillars"]
             msg = (
                 f"🔮 **លទ្ធផល BaZi Four Pillars (FS-Classical-Calc-v1)**\n"
-                f"━━━━━━━━━━━━━━━━━━━\n"
+                f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
                 f"• **សសរស្តម្ភឆ្នាំ:** {p['year']['ganzhi']}\n"
                 f"• **សសរស្តម្ភខែ:** {p['month']['ganzhi']}\n"
                 f"• **សសរស្តម្ភថ្ងៃ:** {p['day']['ganzhi']}\n"
@@ -175,7 +327,11 @@ class FengShuiTelegramBot:
                 "\n".join([f"• {k}: {v}" for k, v in d['five_elements_count'].items()]) +
                 f"\n\n💡 **ដំបូន្មាន:** {d['recommendation']}"
             )
-            await update.message.reply_text(msg, parse_mode="Markdown")
+            keyboard = [
+                [InlineKeyboardButton("📚 រៀនក្បួន BaZi (មេរៀន ៨០១-១០០០)", callback_data="curr_cat_CAT4_p1")],
+                [InlineKeyboardButton("🏠 ម៉ឺនុយដើម", callback_data="menu_main")]
+            ]
+            await update.message.reply_text(msg, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="Markdown")
         else:
             await update.message.reply_text(f"❌ កំហុស៖ {res.get('error')}")
 
@@ -183,7 +339,16 @@ class FengShuiTelegramBot:
         """Handle /predict command."""
         args = context.args
         if not args:
-            await update.message.reply_text("⚠️ សូមបញ្ជាក់ថ្ងៃខែឆ្នាំកំណើត (ឧទាហរណ៍៖ `/predict 1988-05-15`)", parse_mode="Markdown")
+            text = (
+                "📊 **របៀបទស្សន៍ទាយសំណាងប្រចាំថ្ងៃ (FS-Alert-Predictor):**\n"
+                "សូមសរសេរ៖ `/predict <YYYY-MM-DD>`\n"
+                "ឧទាហរណ៍៖ `/predict 1988-05-15`"
+            )
+            keyboard = [
+                [InlineKeyboardButton("📊 ទស្សន៍ទាយថ្ងៃនេះ", callback_data="calc_predict_demo")],
+                [InlineKeyboardButton("🏠 ម៉ឺនុយដើម", callback_data="menu_main")]
+            ]
+            await update.message.reply_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="Markdown")
             return
 
         date_str = args[0]
@@ -192,7 +357,7 @@ class FengShuiTelegramBot:
             d = res["data"]
             msg = (
                 f"📊 **ការព្យាករណ៍ជោគជតារាសីប្រចាំថ្ងៃ (FS-Alert-Predictor)**\n"
-                f"━━━━━━━━━━━━━━━━━━━\n"
+                f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
                 f"📅 **កាលបរិច្ឆេទ:** {d['query_date']} ({d['current_day_pillar']})\n"
                 f"🌟 **សំណាងទូទៅ:** {d['overall_luck']['score']}% - {d['overall_luck']['level']}\n"
                 f"💰 **សំណាងទ្រព្យ:** {d['wealth_luck']['score']}% ({d['wealth_luck']['advice']})\n"
@@ -203,7 +368,11 @@ class FengShuiTelegramBot:
                 "\n".join([f"• {h}" for h in d['auspicious_hours']]) +
                 f"\n\n💡 **ដំបូន្មានប្រចាំថ្ងៃ:** {d['daily_remedy']}"
             )
-            await update.message.reply_text(msg, parse_mode="Markdown")
+            keyboard = [
+                [InlineKeyboardButton("💬 សួរពិគ្រោះបន្ថែម", callback_data="menu_ask")],
+                [InlineKeyboardButton("🏠 ម៉ឺនុយដើម", callback_data="menu_main")]
+            ]
+            await update.message.reply_text(msg, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="Markdown")
 
     async def handle_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle conversational natural language messages via SupremeFengShuiMaster."""
@@ -212,29 +381,200 @@ class FengShuiTelegramBot:
 
         consult_res = self.master.consult(query=user_text)
         response_text = consult_res.get("synthesis", "សូមអភ័យទោស ខ្ញុំមិនអាចឆ្លើយតបនៅពេលនេះបានទេ។")
-        await update.message.reply_text(response_text, parse_mode="Markdown")
+
+        keyboard = [
+            [
+                InlineKeyboardButton("📚 កម្មវិធីសិក្សា ១០០០ មេរៀន", callback_data="menu_curriculum"),
+                InlineKeyboardButton("🏠 ម៉ឺនុយដើម", callback_data="menu_main")
+            ]
+        ]
+        await update.message.reply_text(response_text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="Markdown")
 
     async def button_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Handle inline button clicks."""
+        """Handle all interactive inline keyboard clicks seamlessly."""
         query = update.callback_query
         await query.answer()
-
         data = query.data
-        if data == "menu_gua":
-            await query.edit_message_text("🔢 ដើម្បីគណនា Life Gua សូមសរសេរ៖ `/gua <ឆ្នាំកំណើត> <male/female>`\nឧទាហរណ៍៖ `/gua 1988 male`", parse_mode="Markdown")
-        elif data == "menu_flyingstars":
-            res = self.calc_engine.calculate_flying_stars(2024)
-            if res["success"]:
-                await query.edit_message_text(f"🌌 យុគទី ៩ (២០២៤-២០៤៣): តារាកណ្តាលប្រចាំឆ្នាំ ២០២៤ គឺលេខ ៣ (San Bi)។ ទិសទ្រព្យសំខាន់គឺខាងត្បូង (South) និងខាងជើង (North)។", parse_mode="Markdown")
-        elif data == "menu_bazi":
-            await query.edit_message_text("🔮 ដើម្បីគណនា BaZi សូមសរសេរ៖ `/bazi YYYY-MM-DD HH:MM`\nឧទាហរណ៍៖ `/bazi 1990-05-20 08:30`", parse_mode="Markdown")
-        elif data == "menu_predict":
-            await query.edit_message_text("📊 ដើម្បីទស្សន៍ទាយសំណាង សូមសរសេរ៖ `/predict YYYY-MM-DD`\nឧទាហរណ៍៖ `/predict 1988-08-15`", parse_mode="Markdown")
+
+        # Navigation: Main Menu
+        if data == "menu_main":
+            await query.edit_message_text(
+                "🌟 **SUPREME FENG SHUI AGI SYSTEM (Master Level v1.0.0)** 🌟\n"
+                "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                "សូមជ្រើសរើសមុខងារដែលអ្នកចង់ប្រើប្រាស់៖",
+                reply_markup=self._get_main_keyboard(),
+                parse_mode="Markdown"
+            )
+
+        # Navigation: Curriculum Root
         elif data == "menu_curriculum":
-            await query.edit_message_text("📚 **កម្មវិធីសិក្សាហុងស៊ុយ ១០០ ប្រធានបទ:**\n១. មូលដ្ឋានគ្រឹះ (២០ ប្រធានបទ)\n២. ក្បួនជឿនលឿន (៣០ ប្រធានបទ)\n៣. ការអនុវត្តជាក់ស្តែង (៣០ ប្រធានបទ)\n៤. ក្បួនឯកទេស (២០ ប្រធានបទ)", parse_mode="Markdown")
+            cats = self.curriculum.get_categories()
+            text = (
+                "📚 **កម្មវិធីសិក្សាហុងស៊ុយបុរាណ ១០០ ប្រធានបទ & ១០០០ មេរៀន**\n"
+                "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                "សូមជ្រើសរើសផ្នែកដែលអ្នកចង់សិក្សា៖\n\n"
+                "☯️ **ផ្នែកទី ១:** មូលដ្ឋានគ្រឹះក្បួនហុងស៊ុយបុរាណ (មេរៀន ១-២០០)\n"
+                "🌌 **ផ្នែកទី ២:** ក្បួនជឿនលឿន & តារាហោះ យុគ ៩ (មេរៀន ២០១-៥០០)\n"
+                "🏛️ **ផ្នែកទី ៣:** ការអនុវត្តជាក់ស្តែង & លំនៅឋាន/អាជីវកម្ម (មេរៀន ៥០១-៨០០)\n"
+                "🔮 **ផ្នែកទី ៤:** ក្បួនឯកទេសជាន់ខ្ពស់ & BaZi រាសី (មេរៀន ៨០១-១០០០)"
+            )
+            keyboard = [
+                [InlineKeyboardButton(f"{c['icon']} {c['name_kh']}", callback_data=f"curr_cat_{c['id']}_p1")]
+                for c in cats
+            ]
+            keyboard.append([
+                InlineKeyboardButton("📖 រៀនមេរៀនទី ១", callback_data="curr_les_1"),
+                InlineKeyboardButton("🏠 ម៉ឺនុយដើម", callback_data="menu_main")
+            ])
+            await query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="Markdown")
+
+        # Category Topics List with Pagination
+        elif data.startswith("curr_cat_"):
+            parts = data.split("_")
+            cat_id = parts[2]
+            page = int(parts[3][1:]) if len(parts) > 3 else 1
+
+            topics = self.curriculum.get_topics(category_id=cat_id)
+            page_size = 5
+            total_pages = (len(topics) + page_size - 1) // page_size
+            page_topics = topics[(page - 1) * page_size: page * page_size]
+
+            cat_info = next((c for c in self.curriculum.get_categories() if c["id"] == cat_id), None)
+            text = (
+                f"📚 **{cat_info['icon'] if cat_info else '📚'} {cat_info['name_kh'] if cat_info else cat_id}**\n"
+                f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                f"ទំព័រ {page}/{total_pages} (ប្រធានបទសរុប៖ {len(topics)})\n\n"
+                f"👇 **សូមជ្រើសរើសប្រធានបទដើម្បីមើលមេរៀនលម្អិត៖**"
+            )
+
+            keyboard = []
+            for t in page_topics:
+                keyboard.append([
+                    InlineKeyboardButton(
+                        f"📌 ប្រធានបទ {t['topic_id']}: {t['name_kh']}",
+                        callback_data=f"curr_top_{t['topic_id']}"
+                    )
+                ])
+
+            # Pagination row
+            nav_row = []
+            if page > 1:
+                nav_row.append(InlineKeyboardButton("⬅️ មុន", callback_data=f"curr_cat_{cat_id}_p{page-1}"))
+            if page < total_pages:
+                nav_row.append(InlineKeyboardButton("➡️ បន្ទាប់", callback_data=f"curr_cat_{cat_id}_p{page+1}"))
+            if nav_row:
+                keyboard.append(nav_row)
+
+            keyboard.append([
+                InlineKeyboardButton("📚 ត្រឡប់ទៅផ្នែកទាំង ៤", callback_data="menu_curriculum"),
+                InlineKeyboardButton("🏠 ម៉ឺនុយដើម", callback_data="menu_main")
+            ])
+            await query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="Markdown")
+
+        # Topic Details & Sub-Lessons List
+        elif data.startswith("curr_top_"):
+            topic_id = int(data.split("_")[2])
+            topic = self.curriculum.get_topic(topic_id)
+            if not topic:
+                await query.edit_message_text("❌ រកមិនឃើញប្រធានបទនេះឡើយ។")
+                return
+
+            text = (
+                f"📌 **ប្រធានបទទី {topic['topic_id']}: {topic['name_kh']}**\n"
+                f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                f"🏷️ **ផ្នែក:** {topic['category_icon']} {topic['category_name']}\n"
+                f"📝 **ខ្លឹមសារ:** {topic['summary']}\n"
+                f"🔢 **មេរៀន:** ទី {topic['lesson_start']} ដល់ {topic['lesson_end']} (សរុប ១០ មេរៀន)\n\n"
+                f"👇 **សូមជ្រើសរើសមេរៀនដើម្បីអាន និងរៀនសូត្រ៖**"
+            )
+
+            keyboard = []
+            for les in topic["lessons"]:
+                keyboard.append([
+                    InlineKeyboardButton(
+                        f"📖 មេរៀន {les['lesson_id']}: {les['sub_topic_kh']}",
+                        callback_data=f"curr_les_{les['lesson_id']}"
+                    )
+                ])
+
+            keyboard.append([
+                InlineKeyboardButton("🔙 ត្រឡប់ទៅបញ្ជីប្រធានបទ", callback_data=f"curr_cat_{topic['category_id']}_p1"),
+                InlineKeyboardButton("🏠 ម៉ឺនុយដើម", callback_data="menu_main")
+            ])
+            await query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="Markdown")
+
+        # Individual Lesson View with Next / Prev
+        elif data.startswith("curr_les_"):
+            lesson_id = int(data.split("_")[2])
+            await self._send_lesson_view(query, lesson_id, is_edit=True)
+
+        # Deep AI Explanation of Lesson
+        elif data.startswith("curr_exp_"):
+            lesson_id = int(data.split("_")[2])
+            lesson = self.curriculum.get_lesson(lesson_id)
+            if not lesson:
+                await query.edit_message_text("❌ រកមិនឃើញមេរៀន។")
+                return
+
+            await query.edit_message_text(
+                f"⏳ **កំពុងដំណើរការម៉ូដែល FS-Supreme-Master ដើម្បីពន្យល់មេរៀនទី {lesson_id}...**\n\n"
+                f"*(សូមរង់ចាំបន្តិច ប្រព័ន្ធកំពុងសំយោគក្បួនបុរាណ យុគទី ៩ ធាតុភ្លើង)*"
+            )
+
+            # Generate deep explanation
+            res = self.curriculum.generate_deep_explanation(lesson_id)
+            exp_text = res.get("deep_explanation", "")
+
+            full_text = (
+                f"🧠 **ការពន្យល់ស៊ីជម្រៅកម្រិតកំពូល (Master Level AI Synthesis)**\n"
+                f"📚 **{lesson['title_kh']}**\n"
+                f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                f"{exp_text}\n\n"
+                f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                f"*(ប្រព័ន្ធបណ្តុះបណ្តាលដោយ 7 Core Pillars & LoRA Adapter)*"
+            )
+
+            nav_row = []
+            if lesson["prev_lesson_id"]:
+                nav_row.append(InlineKeyboardButton("⬅️ មេរៀនមុន", callback_data=f"curr_les_{lesson['prev_lesson_id']}"))
+            if lesson["next_lesson_id"]:
+                nav_row.append(InlineKeyboardButton("➡️ មេរៀនបន្ទាប់", callback_data=f"curr_les_{lesson['next_lesson_id']}"))
+
+            keyboard = []
+            if nav_row:
+                keyboard.append(nav_row)
+            keyboard.append([
+                InlineKeyboardButton("📖 អានសេចក្តីសង្ខេបមេរៀន", callback_data=f"curr_les_{lesson_id}"),
+                InlineKeyboardButton("📑 មេរៀនក្នុងប្រធានបទ", callback_data=f"curr_top_{lesson['topic_id']}")
+            ])
+            keyboard.append([
+                InlineKeyboardButton("🏠 ម៉ឺនុយដើម", callback_data="menu_main")
+            ])
+            await query.edit_message_text(full_text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="Markdown")
+
+        # Interactive Calculation Quick Demos
+        elif data == "menu_gua":
+            await self.gua_command(update, context)
+        elif data == "menu_flyingstars":
+            await self.flyingstars_command(update, context)
+        elif data == "menu_bazi":
+            await self.bazi_command(update, context)
+        elif data == "menu_predict":
+            await self.predict_command(update, context)
+        elif data == "menu_ask":
+            await query.edit_message_text(
+                "💬 **សូមវាយសំណួររបស់អ្នកផ្ញើមកទីនេះដោយផ្ទាល់**\n\n"
+                "ឧទាហរណ៍៖\n"
+                "• *តើខ្ញុំគួររៀបចំបន្ទប់គេង និងតុធ្វើការយ៉ាងណាដើម្បីស្រូបទ្រព្យក្នុងយុគទី ៩?*\n"
+                "• *ផ្ទះបែរមុខទៅទិសខាងត្បូង ១៨០ ដឺក្រេ តើល្អដែរឬទេ?*",
+                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🏠 ម៉ឺនុយដើម", callback_data="menu_main")]]),
+                parse_mode="Markdown"
+            )
+        elif data == "menu_help":
+            await self.help_command(update, context)
 
     def run(self):
-        """Start the Telegram Bot polling daemon."""
+        """Start the Telegram Bot polling daemon with native command registration."""
         if not TELEGRAM_AVAILABLE or not self.token or self.token == "your_telegram_bot_token_here":
             logger.warning("Telegram Bot Token is not configured or python-telegram-bot is missing. Skipping bot run.")
             return
@@ -247,11 +587,13 @@ class FengShuiTelegramBot:
                 loop = asyncio.new_event_loop()
                 asyncio.set_event_loop(loop)
 
-            logger.info("Starting Telegram Bot Application...")
-            app = Application.builder().token(self.token).build()
+            logger.info("Starting Super Smart Telegram Bot Application...")
+            app = Application.builder().token(self.token).post_init(self.post_init).build()
 
             app.add_handler(CommandHandler("start", self.start_command))
             app.add_handler(CommandHandler("help", self.help_command))
+            app.add_handler(CommandHandler("curriculum", self.curriculum_command))
+            app.add_handler(CommandHandler("learn", self.learn_command))
             app.add_handler(CommandHandler("gua", self.gua_command))
             app.add_handler(CommandHandler("flyingstars", self.flyingstars_command))
             app.add_handler(CommandHandler("bazi", self.bazi_command))
@@ -260,7 +602,7 @@ class FengShuiTelegramBot:
             app.add_handler(CallbackQueryHandler(self.button_callback))
             app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, self.handle_message))
 
-            logger.info("Telegram Bot polling started successfully.")
+            logger.info("Telegram Bot polling started successfully with full 1000-lesson matrix.")
             app.run_polling(stop_signals=None, close_loop=False)
         except Exception as e:
             logger.error(f"Telegram Bot error: {e}", exc_info=True)

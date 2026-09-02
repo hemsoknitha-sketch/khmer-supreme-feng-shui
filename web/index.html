@@ -37,6 +37,7 @@
         <!-- Main Workspace Tabs -->
         <nav class="nav-tabs">
             <button class="tab-btn active" onclick="switchTab('consultTab')"><i class="fa-solid fa-comments"></i> ពិគ្រោះយោបល់ AI Master</button>
+            <button class="tab-btn" onclick="switchTab('curriculumTab')"><i class="fa-solid fa-graduation-cap"></i> កម្មវិធីសិក្សា ១០០០ មេរៀន</button>
             <button class="tab-btn" onclick="switchTab('calcTab')"><i class="fa-solid fa-compass"></i> គណនា Life Gua & 24 ភ្នំ</button>
             <button class="tab-btn" onclick="switchTab('starsTab')"><i class="fa-solid fa-star"></i> តារាហោះ យុគ ៩</button>
             <button class="tab-btn" onclick="switchTab('baziTab')"><i class="fa-solid fa-scroll"></i> BaZi & ជោគជតារាសី</button>
@@ -104,6 +105,85 @@
                                 <strong>សូមស្វាគមន៍មកកាន់ Supreme Feng Shui AGI System!</strong><br>
                                 សូមបំពេញព័ត៌មានថ្ងៃខែឆ្នាំកំណើត និងសួរសំណួរដើម្បីឱ្យម៉ូដែល **FS-Supreme-Master** ធ្វើការគណនា និងវិភាគលម្អិតជូនលោកអ្នក។
                             </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- TAB: 1000 Lessons Curriculum Learning Center -->
+        <section id="curriculumTab" class="tab-content">
+            <div class="curriculum-container">
+                <!-- Grand Categories Selector Bar -->
+                <div class="glass-card cat-selector-card">
+                    <div class="card-title">
+                        <i class="fa-solid fa-graduation-cap"></i>
+                        <h3>កម្មវិធីសិក្សាហុងស៊ុយបុរាណ ១០០ ប្រធានបទ & ១០០០ មេរៀន (Period 9 Mastery)</h3>
+                    </div>
+                    <div class="category-tabs" id="curriculumCatTabs">
+                        <button class="cat-chip active" onclick="selectCurriculumCategory('CAT1')">☯️ ផ្នែកទី ១៖ មូលដ្ឋានគ្រឹះ (១-២០០)</button>
+                        <button class="cat-chip" onclick="selectCurriculumCategory('CAT2')">🌌 ផ្នែកទី ២៖ ក្បួនជឿនលឿន & យុគ ៩ (២០១-៥០០)</button>
+                        <button class="cat-chip" onclick="selectCurriculumCategory('CAT3')">🏛️ ផ្នែកទី ៣៖ លំនៅឋាន & អាជីវកម្ម (៥០១-៨០០)</button>
+                        <button class="cat-chip" onclick="selectCurriculumCategory('CAT4')">🔮 ផ្នែកទី ៤៖ ក្បួនឯកទេស & BaZi (៨០១-១០០០)</button>
+                    </div>
+                </div>
+
+                <div class="grid-2-col" style="margin-top: 20px;">
+                    <!-- Topics & Lessons Selector List -->
+                    <div class="glass-card topics-card">
+                        <div class="card-title">
+                            <i class="fa-solid fa-list-ol"></i>
+                            <h3 id="currentCategoryHeading">បញ្ជីប្រធានបទ</h3>
+                        </div>
+                        <div class="search-box">
+                            <input type="text" id="curriculumSearchInput" placeholder="🔍 ស្វែងរកប្រធានបទ ឬលេខមេរៀន (1-1000)..." oninput="filterTopics(this.value)">
+                        </div>
+                        <div class="topics-list" id="curriculumTopicsList">
+                            <!-- Dynamic Topic items populated via JS -->
+                        </div>
+                    </div>
+
+                    <!-- Lesson Reader & AI Deep Explanation Card -->
+                    <div class="glass-card lesson-reader-card">
+                        <div class="card-title">
+                            <i class="fa-solid fa-book-open-reader"></i>
+                            <h3 id="lessonTitleHeader">មេរៀនទី ១៖ ប្រភពដើម និងទស្សនវិជ្ជាហុងស៊ុយបុរាណ</h3>
+                            <span class="badge" id="lessonNumberBadge">មេរៀន 1/1000</span>
+                        </div>
+                        
+                        <div class="lesson-meta-bar" id="lessonMetaBar">
+                            <span class="pill-badge" id="lessonCatBadge">☯️ ផ្នែកទី ១៖ មូលដ្ឋានគ្រឹះ</span>
+                            <span class="pill-badge" id="lessonTopicBadge">ប្រធានបទទី ១</span>
+                        </div>
+
+                        <div class="lesson-body" id="lessonBodyContent">
+                            <div class="lesson-section">
+                                <h4>📖 ១. ទ្រឹស្តី និងនិយមន័យក្បួន</h4>
+                                <p id="lessonClassicalRule">កំពុងផ្ទុកខ្លឹមសារមេរៀន...</p>
+                            </div>
+                            <div class="lesson-section">
+                                <h4>📐 ២. រូបមន្តគណិតវិទ្យាហុងស៊ុយ</h4>
+                                <div class="formula-box" id="lessonFormula">`កំពុងផ្ទុក...`</div>
+                            </div>
+                            <div class="lesson-section">
+                                <h4>💡 ៣. ការអនុវត្តជាក់ស្តែង & ដំណោះស្រាយ</h4>
+                                <p id="lessonRemedy">កំពុងផ្ទុក...</p>
+                            </div>
+                        </div>
+
+                        <!-- Lesson Navigation Buttons -->
+                        <div class="lesson-actions-bar">
+                            <button class="secondary-btn" id="btnPrevLesson" onclick="navigateLesson(-1)"><i class="fa-solid fa-arrow-left"></i> ថយក្រោយ</button>
+                            <button class="primary-btn ai-explain-btn" id="btnDeepExplain" onclick="requestDeepAIExplanation()"><i class="fa-solid fa-brain"></i> ពន្យល់លម្អិតជាមួយ AI Master</button>
+                            <button class="secondary-btn" id="btnNextLesson" onclick="navigateLesson(1)">បន្ទាប់ <i class="fa-solid fa-arrow-right"></i></button>
+                        </div>
+
+                        <!-- Deep AI Explanation Box -->
+                        <div class="ai-explanation-box" id="aiExplanationBox" style="display:none;">
+                            <div class="ai-exp-header">
+                                <i class="fa-solid fa-sparkles"></i> <strong>ការពន្យល់ស៊ីជម្រៅកម្រិតកំពូល (FS-Supreme-Master Synthesis)</strong>
+                            </div>
+                            <div class="ai-exp-content" id="aiExpContent"></div>
                         </div>
                     </div>
                 </div>

@@ -274,9 +274,190 @@ async function updateMemoryTelemetry() {
     }
 }
 
+// 7. Curriculum Center Logic (100 Topics & 1,000 Lessons)
+let currentCategory = 'CAT1';
+let currentLessonId = 1;
+let allTopics = [];
+
+async function loadCurriculumTopics(categoryId) {
+    currentCategory = categoryId;
+    const listEl = document.getElementById('curriculumTopicsList');
+    if (!listEl) return;
+
+    listEl.innerHTML = '<div style="color:var(--text-muted); padding:10px;">⏳ កំពុងផ្ទុកប្រធានបទ...</div>';
+
+    try {
+        const res = await fetch(`/api/curriculum/topics?category_id=${categoryId}`);
+        const json = await res.json();
+        if (json.success) {
+            allTopics = json.data;
+            renderTopicsList(allTopics);
+        }
+    } catch (e) {
+        listEl.innerHTML = `<div style="color:#ff4757;">❌ បរាជ័យក្នុងការផ្ទុកប្រធានបទ៖ ${e.message}</div>`;
+    }
+}
+
+function selectCurriculumCategory(catId) {
+    document.querySelectorAll('.cat-chip').forEach(chip => {
+        chip.classList.toggle('active', chip.getAttribute('onclick').includes(catId));
+    });
+    loadCurriculumTopics(catId);
+}
+
+function renderTopicsList(topics) {
+    const listEl = document.getElementById('curriculumTopicsList');
+    if (!listEl) return;
+
+    if (topics.length === 0) {
+        listEl.innerHTML = '<div style="color:var(--text-muted); padding:10px;">រកមិនឃើញប្រធានបទ។</div>';
+        return;
+    }
+
+    listEl.innerHTML = topics.map(t => `
+        <div class="topic-item" id="topic_item_${t.topic_id}">
+            <div class="topic-item-header" onclick="toggleTopicLessons(${t.topic_id})">
+                <span>📌 ប្រធានបទ ${t.topic_id}: ${t.name_kh}</span>
+                <span style="font-size:0.75rem; color:var(--gold);">មេរៀន ${t.lesson_start}-${t.lesson_end}</span>
+            </div>
+            <div class="topic-item-desc">${t.summary}</div>
+            <div class="lesson-sub-list" id="sub_list_${t.topic_id}" style="display:none;"></div>
+        </div>
+    `).join('');
+}
+
+async function toggleTopicLessons(topicId) {
+    const subList = document.getElementById(`sub_list_${topicId}`);
+    if (!subList) return;
+
+    if (subList.style.display === 'flex') {
+        subList.style.display = 'none';
+        return;
+    }
+
+    subList.style.display = 'flex';
+    subList.innerHTML = '<div style="font-size:0.75rem; color:var(--text-muted);">⏳ កំពុងទាញមេរៀន...</div>';
+
+    try {
+        const res = await fetch(`/api/curriculum/topic/${topicId}`);
+        const json = await res.json();
+        if (json.success && json.data.lessons) {
+            subList.innerHTML = json.data.lessons.map(les => `
+                <div class="lesson-sub-item ${les.lesson_id === currentLessonId ? 'active' : ''}" 
+                     onclick="event.stopPropagation(); loadLessonDetails(${les.lesson_id});">
+                    📖 មេរៀន ${les.lesson_id}: ${les.sub_topic_kh}
+                </div>
+            `).join('');
+        }
+    } catch (e) {
+        subList.innerHTML = `<div style="color:#ff4757; font-size:0.75rem;">កំហុស៖ ${e.message}</div>`;
+    }
+}
+
+function filterTopics(query) {
+    if (!query) {
+        renderTopicsList(allTopics);
+        return;
+    }
+    const q = query.toLowerCase().trim();
+    const num = parseInt(q);
+    if (!isNaN(num) && num >= 1 && num <= 1000) {
+        loadLessonDetails(num);
+    }
+
+    const filtered = allTopics.filter(t => 
+        t.name_kh.toLowerCase().includes(q) ||
+        t.name_en.toLowerCase().includes(q) ||
+        t.summary.toLowerCase().includes(q) ||
+        (num >= t.lesson_start && num <= t.lesson_end)
+    );
+    renderTopicsList(filtered);
+}
+
+async function loadLessonDetails(lessonId) {
+    currentLessonId = lessonId;
+    const titleEl = document.getElementById('lessonTitleHeader');
+    const badgeEl = document.getElementById('lessonNumberBadge');
+    const catBadge = document.getElementById('lessonCatBadge');
+    const topicBadge = document.getElementById('lessonTopicBadge');
+    const ruleEl = document.getElementById('lessonClassicalRule');
+    const formulaEl = document.getElementById('lessonFormula');
+    const remedyEl = document.getElementById('lessonRemedy');
+    const expBox = document.getElementById('aiExplanationBox');
+    const prevBtn = document.getElementById('btnPrevLesson');
+    const nextBtn = document.getElementById('btnNextLesson');
+
+    if (expBox) expBox.style.display = 'none';
+
+    try {
+        const res = await fetch(`/api/curriculum/lesson/${lessonId}`);
+        const json = await res.json();
+        if (json.success) {
+            const les = json.data;
+            if (titleEl) titleEl.innerText = les.title_kh;
+            if (badgeEl) badgeEl.innerText = `មេរៀន ${les.lesson_id}/1000`;
+            if (catBadge) catBadge.innerText = `${les.category_icon} ${les.category_name}`;
+            if (topicBadge) topicBadge.innerText = `ប្រធានបទទី ${les.topic_id}: ${les.topic_title_kh}`;
+            if (ruleEl) ruleEl.innerText = les.classical_rule;
+            if (formulaEl) formulaEl.innerText = les.formula;
+            if (remedyEl) remedyEl.innerText = les.practical_remedy;
+
+            if (prevBtn) prevBtn.disabled = !les.prev_lesson_id;
+            if (nextBtn) nextBtn.disabled = !les.next_lesson_id;
+
+            // Highlight active lesson in sidebar
+            document.querySelectorAll('.lesson-sub-item').forEach(item => {
+                item.classList.toggle('active', item.innerText.includes(`មេរៀន ${lessonId}:`));
+            });
+        }
+    } catch (e) {
+        console.error("Error loading lesson:", e);
+    }
+}
+
+function navigateLesson(direction) {
+    const targetId = currentLessonId + direction;
+    if (targetId >= 1 && targetId <= 1000) {
+        loadLessonDetails(targetId);
+    }
+}
+
+async function requestDeepAIExplanation() {
+    const btn = document.getElementById('btnDeepExplain');
+    const expBox = document.getElementById('aiExplanationBox');
+    const expContent = document.getElementById('aiExpContent');
+
+    if (!expBox || !expContent) return;
+
+    btn.disabled = true;
+    btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> កំពុងដំណើរការ AI Master...`;
+    expBox.style.display = 'block';
+    expContent.innerHTML = `<div style="color:var(--gold);">⏳ ម៉ូដែល FS-Supreme-Master កំពុងសំយោគក្បួនមេរៀនទី ${currentLessonId}...</div>`;
+
+    try {
+        const res = await fetch(`/api/curriculum/lesson/${currentLessonId}/explain`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        });
+        const json = await res.json();
+        if (json.success) {
+            expContent.innerText = json.deep_explanation;
+        } else {
+            expContent.innerText = `❌ កំហុស៖ ${json.error || 'មិនអាចបង្កើតបាន'}`;
+        }
+    } catch (e) {
+        expContent.innerText = `❌ កំហុសតភ្ជាប់ API៖ ${e.message}`;
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = `<i class="fa-solid fa-brain"></i> ពន្យល់លម្អិតជាមួយ AI Master`;
+    }
+}
+
 // Initial Setup
 document.addEventListener('DOMContentLoaded', () => {
     updateCompass(180);
     updateMemoryTelemetry();
+    loadCurriculumTopics('CAT1');
+    loadLessonDetails(1);
     setInterval(updateMemoryTelemetry, 10000);
 });

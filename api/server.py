@@ -182,12 +182,45 @@ def consult_ai(req: ConsultRequest):
     )
 
 
-@app.get("/api/curriculum")
-def get_curriculum():
-    """Retrieve 100 Topics Feng Shui training curriculum."""
-    kb_path = config.DATA_DIR / "knowledge_base.json"
-    if kb_path.exists():
-        import json
-        with open(kb_path, "r", encoding="utf-8") as f:
-            return json.load(f)
-    return {"categories": []}
+@app.get("/api/curriculum/categories")
+def get_curriculum_categories():
+    """Retrieve 4 grand categories of Classical Feng Shui."""
+    from engines.curriculum_engine import curriculum_engine
+    return {"success": True, "data": curriculum_engine.get_categories()}
+
+
+@app.get("/api/curriculum/topics")
+def get_curriculum_topics(category_id: Optional[str] = None):
+    """Retrieve 100 master topics, optionally filtered by category."""
+    from engines.curriculum_engine import curriculum_engine
+    return {"success": True, "data": curriculum_engine.get_topics(category_id)}
+
+
+@app.get("/api/curriculum/topic/{topic_id}")
+def get_curriculum_topic(topic_id: int):
+    """Retrieve specific topic details and its 10 sub-lessons."""
+    from engines.curriculum_engine import curriculum_engine
+    topic = curriculum_engine.get_topic(topic_id)
+    if not topic:
+        raise HTTPException(status_code=404, detail="Topic not found")
+    return {"success": True, "data": topic}
+
+
+@app.get("/api/curriculum/lesson/{lesson_id}")
+def get_curriculum_lesson(lesson_id: int):
+    """Retrieve specific lesson details out of 1000 lessons with next/prev navigation."""
+    from engines.curriculum_engine import curriculum_engine
+    lesson = curriculum_engine.get_lesson(lesson_id)
+    if not lesson:
+        raise HTTPException(status_code=404, detail="Lesson not found (must be 1-1000)")
+    return {"success": True, "data": lesson}
+
+
+@app.post("/api/curriculum/lesson/{lesson_id}/explain")
+def explain_curriculum_lesson(lesson_id: int):
+    """Generate deep AI Master explanation for a lesson using FS-Supreme-Master."""
+    from engines.curriculum_engine import curriculum_engine
+    result = curriculum_engine.generate_deep_explanation(lesson_id)
+    if not result.get("success"):
+        raise HTTPException(status_code=400, detail=result.get("error"))
+    return result

@@ -137,6 +137,62 @@ class TestSupremeFengShuiSystem(unittest.TestCase):
         print(f"\n[RAM Benchmark] Current Process RAM: {ram_mb:.2f} MB / 1024 MB VPS Limit")
         self.assertLess(ram_mb, 350.0, "Process memory footprint must stay under 350MB.")
 
+    # 11. Test Curriculum Engine Categories & 100 Topics
+    def test_11_curriculum_categories_and_topics(self):
+        """Verify 4 Grand Categories and 100 Topics exist and map correctly."""
+        from engines.curriculum_engine import curriculum_engine
+        cats = curriculum_engine.get_categories()
+        self.assertEqual(len(cats), 4, "Must have 4 Grand Categories.")
+
+        topics = curriculum_engine.get_topics()
+        self.assertEqual(len(topics), 100, "Must have 100 Master Topics.")
+
+        # Test filter by category CAT1 (1 to 20)
+        cat1_topics = curriculum_engine.get_topics("CAT1")
+        self.assertEqual(len(cat1_topics), 20)
+
+    # 12. Test 1,000 Lessons Navigation and Integrity
+    def test_12_curriculum_1000_lessons(self):
+        """Verify boundaries and structure of 1,000 lessons."""
+        from engines.curriculum_engine import curriculum_engine
+        
+        # Test Lesson 1
+        les1 = curriculum_engine.get_lesson(1)
+        self.assertIsNotNone(les1)
+        self.assertEqual(les1["lesson_id"], 1)
+        self.assertEqual(les1["topic_id"], 1)
+        self.assertIsNone(les1["prev_lesson_id"])
+        self.assertEqual(les1["next_lesson_id"], 2)
+
+        # Test Lesson 500 (End of CAT2)
+        les500 = curriculum_engine.get_lesson(500)
+        self.assertIsNotNone(les500)
+        self.assertEqual(les500["lesson_id"], 500)
+        self.assertEqual(les500["topic_id"], 50)
+        self.assertEqual(les500["prev_lesson_id"], 499)
+        self.assertEqual(les500["next_lesson_id"], 501)
+
+        # Test Lesson 1000 (Final Master Synthesis Lesson)
+        les1000 = curriculum_engine.get_lesson(1000)
+        self.assertIsNotNone(les1000)
+        self.assertEqual(les1000["lesson_id"], 1000)
+        self.assertEqual(les1000["topic_id"], 100)
+        self.assertEqual(les1000["prev_lesson_id"], 999)
+        self.assertIsNone(les1000["next_lesson_id"])
+
+        # Test Invalid Bounds
+        self.assertIsNone(curriculum_engine.get_lesson(0))
+        self.assertIsNone(curriculum_engine.get_lesson(1001))
+
+    # 13. Test Deep AI Master Explanation
+    def test_13_curriculum_deep_explanation(self):
+        """Verify deep AI explanation generation for a lesson."""
+        from engines.curriculum_engine import curriculum_engine
+        res = curriculum_engine.generate_deep_explanation(1)
+        self.assertTrue(res["success"])
+        self.assertIn("deep_explanation", res)
+        self.assertGreater(len(res["deep_explanation"]), 50)
+
 
 if __name__ == "__main__":
     unittest.main()
