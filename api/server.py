@@ -37,6 +37,19 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
+@app.middleware("http")
+async def add_security_headers(request, call_next):
+    """Enterprise security headers defense (Anti-XSS, Anti-Clickjacking, No-Sniff)."""
+    response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["X-XSS-Protection"] = "1; mode=block"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    response.headers["Server"] = "Supreme-FengShui-AGI-Shield"
+    return response
+
+
 # Initialize Intelligence Master
 master = SupremeFengShuiMaster()
 calc_engine = ClassicalCalcEngine()

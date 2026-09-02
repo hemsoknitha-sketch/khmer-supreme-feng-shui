@@ -28,6 +28,7 @@ from engines.supreme_master import SupremeFengShuiMaster
 from engines.classical_calc import ClassicalCalcEngine
 from engines.alert_predictor import AlertPredictionEngine
 from engines.curriculum_engine import curriculum_engine
+from engines.security_guard import security_guard
 from database.db_manager import db_manager
 
 logger = logging.getLogger("SupremeFengShui.TelegramBot")
@@ -43,6 +44,7 @@ class FengShuiTelegramBot:
     - VIP Membership & License Key Redemption System (Monthly, Yearly, Lifetime)
     - Super Admin Management Panel & License Generator
     - High-Precision Classical Calculations (Life Gua, Flying Stars, BaZi, Fortune Alerts)
+    - Enterprise Security Shield (Anti-Spam, Prompt Injection Guard, Secret Redaction)
     """
 
     def __init__(self, token: str = None):
@@ -52,9 +54,11 @@ class FengShuiTelegramBot:
         self.alert_engine = AlertPredictionEngine()
         self.curriculum = curriculum_engine
         self.db = db_manager
+        self.security = security_guard
 
     async def _safe_reply(self, message, text: str, reply_markup=None):
-        """Safely send markdown text, automatically falling back to plain text and guarding max length."""
+        """Safely send markdown text, automatically redacting secrets, falling back to plain text, and guarding max length."""
+        text = self.security.redact_secrets(text)
         if len(text) > 4000:
             text = text[:3950] + "\n\n...(ចុចប៊ូតុងខាងក្រោមដើម្បីអានបន្ត)..."
         try:
@@ -67,7 +71,8 @@ class FengShuiTelegramBot:
                 logger.error(f"Failed to reply text: {e2}")
 
     async def _safe_edit(self, query, text: str, reply_markup=None):
-        """Safely edit message text, automatically falling back to plain text and guarding max length."""
+        """Safely edit message text, automatically redacting secrets, falling back to plain text, and guarding max length."""
+        text = self.security.redact_secrets(text)
         if len(text) > 4000:
             text = text[:3950] + "\n\n...(ចុចប៊ូតុងខាងក្រោមដើម្បីអានបន្ត)..."
         try:
@@ -826,11 +831,29 @@ class FengShuiTelegramBot:
             await self._safe_reply(update.message, msg, reply_markup=InlineKeyboardMarkup(keyboard))
 
     async def handle_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Handle conversational natural language messages with VIP limit enforcement."""
+        """Handle conversational natural language messages with VIP limit & security enforcement."""
         from_user = update.effective_user
         user_text = update.message.text
+        is_admin = from_user.id in config.ADMIN_USER_IDS
 
-        # Check and increment query limit for free vs VIP users
+        # 1. Anti-Spam & Anti-DDoS Rate Limiting
+        rate_ok, warn_msg = self.security.check_rate_limit(from_user.id, is_admin=is_admin)
+        if not rate_ok:
+            await self._safe_reply(update.message, warn_msg)
+            return
+
+        # 2. Input Sanitization & Prompt Injection / Jailbreak Guard
+        clean_text, is_safe, threat_reason = self.security.sanitize_user_input(user_text)
+        if not is_safe:
+            security_alert = (
+                f"🛡️ **ការទប់ស្កាត់សុវត្ថិភាព (Security Shield Active)**\n\n"
+                f"⚠️ {threat_reason}\n"
+                f"👉 សូមផ្ញើសំណួរដែលទាក់ទងនឹងក្បួនហុងស៊ុយ យិនយ៉ាង ឬតារាហោះធម្មតា។"
+            )
+            await self._safe_reply(update.message, security_alert)
+            return
+
+        # 3. Check and increment query limit for free vs VIP users
         limit_check = self.db.check_and_increment_query(from_user.id, max_free_limit=config.MAX_FREE_DAILY_QUERIES)
 
         if not limit_check["allowed"]:
@@ -844,7 +867,7 @@ class FengShuiTelegramBot:
 
         await update.message.chat.send_action("typing")
 
-        consult_res = self.master.consult(query=user_text)
+        consult_res = self.master.consult(query=clean_text)
         response_text = consult_res.get("synthesis", "សូមអភ័យទោស ខ្ញុំមិនអាចឆ្លើយតបនៅពេលនេះបានទេ។")
 
         # Footer info
