@@ -198,7 +198,7 @@ class FengShuiTelegramBot:
             f"🎯 **ប្រធានបទរង:** {lesson['sub_topic_kh']}\n"
             f"🏛️ **សសរស្តម្ភសកម្ម:** `{lesson.get('active_pillar', '7 Pillars Core')}`\n\n"
             f"📜 **១. គម្ពីរ និងទស្សនវិជ្ជាគ្រឹះ:**\n{lesson['classical_rule']}\n\n"
-            f"📐 **២. រូបមន្តគណិតវិទ្យា & ឡូប៉ាន ២៤ ភ្នំ:**\n`{lesson['formula']}`\n\n"
+            f"📐 **២. រូបមន្តគណិតវិទ្យា & ឡូប៉ាន ២៤ ភ្នំ:**\n{lesson['formula']}\n\n"
             f"🏛️ **៣. ការវិភាគ ៧ សសរស្តម្ភ AGI:**\n"
             f"• ⛰️ **Geo / Landform:** {lesson.get('geo_analysis', '')}\n"
             f"• 💨 **Qi Dynamics:** {lesson.get('qi_analysis', '')}\n"
