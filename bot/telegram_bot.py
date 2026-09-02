@@ -68,33 +68,89 @@ class FengShuiTelegramBot:
         self.love = mahasneh_love_engine
         self.celestial = CelestialAstrologyEngine()
 
+    def _chunk_text(self, text: str, max_chunk: int = 3900) -> List[str]:
+        """Split long text into clean chunks at natural paragraph boundaries or dividers."""
+        if len(text) <= max_chunk:
+            return [text]
+
+        chunks = []
+        current = ""
+        paragraphs = text.split("\n\n")
+
+        for p in paragraphs:
+            if len(current) + len(p) + 2 <= max_chunk:
+                current = f"{current}\n\n{p}" if current else p
+            else:
+                if current:
+                    chunks.append(current.strip())
+                if len(p) > max_chunk:
+                    for i in range(0, len(p), max_chunk):
+                        chunks.append(p[i:i + max_chunk].strip())
+                    current = ""
+                else:
+                    current = p
+
+        if current:
+            chunks.append(current.strip())
+        return chunks
+
     async def _safe_reply(self, message, text: str, reply_markup=None):
-        """Safely send markdown text, automatically redacting secrets, falling back to plain text, and guarding max length."""
+        """Safely send markdown text, automatically redacting secrets, chunking long treatises (>4000 chars), falling back to plain text, and guarding Telegram limits."""
         text = self.security.redact_secrets(text)
-        if len(text) > 4000:
-            text = text[:3950] + "\n\n...(ចុចប៊ូតុងខាងក្រោមដើម្បីអានបន្ត)..."
-        try:
-            return await message.reply_text(text, reply_markup=reply_markup, parse_mode="Markdown")
-        except Exception as e:
-            logger.debug(f"Markdown parse fallback for reply: {e}")
+        chunks = self._chunk_text(text, max_chunk=3900)
+
+        last_msg = None
+        for idx, chunk in enumerate(chunks):
+            is_last = (idx == len(chunks) - 1)
+            markup = reply_markup if is_last else None
             try:
-                return await message.reply_text(text, reply_markup=reply_markup)
-            except Exception as e2:
-                logger.error(f"Failed to reply text: {e2}")
+                last_msg = await message.reply_text(chunk, reply_markup=markup, parse_mode="Markdown")
+            except Exception as e:
+                logger.debug(f"Markdown parse fallback for reply: {e}")
+                try:
+                    last_msg = await message.reply_text(chunk, reply_markup=markup)
+                except Exception as e2:
+                    logger.error(f"Failed to reply chunk {idx}: {e2}")
+
+            if not is_last:
+                await asyncio.sleep(0.3)
+        return last_msg
 
     async def _safe_edit(self, query, text: str, reply_markup=None):
-        """Safely edit message text, automatically redacting secrets, falling back to plain text, and guarding max length."""
+        """Safely edit message text or chunk into multiple messages if length exceeds Telegram 4000 char limits."""
         text = self.security.redact_secrets(text)
-        if len(text) > 4000:
-            text = text[:3950] + "\n\n...(ចុចប៊ូតុងខាងក្រោមដើម្បីអានបន្ត)..."
-        try:
-            return await query.edit_message_text(text, reply_markup=reply_markup, parse_mode="Markdown")
-        except Exception as e:
-            logger.debug(f"Markdown parse fallback for edit: {e}")
+        chunks = self._chunk_text(text, max_chunk=3900)
+
+        if len(chunks) == 1:
             try:
-                return await query.edit_message_text(text, reply_markup=reply_markup)
-            except Exception as e2:
-                logger.warning(f"Could not edit message: {e2}")
+                return await query.edit_message_text(chunks[0], reply_markup=reply_markup, parse_mode="Markdown")
+            except Exception as e:
+                logger.debug(f"Markdown parse fallback for edit: {e}")
+                try:
+                    return await query.edit_message_text(chunks[0], reply_markup=reply_markup)
+                except Exception as e2:
+                    logger.warning(f"Could not edit message: {e2}")
+        else:
+            # Multi-part chunked edit & sequential follow-up delivery
+            try:
+                await query.edit_message_text(chunks[0], parse_mode="Markdown")
+            except Exception:
+                try:
+                    await query.edit_message_text(chunks[0])
+                except Exception:
+                    pass
+
+            for idx in range(1, len(chunks)):
+                await asyncio.sleep(0.3)
+                is_last = (idx == len(chunks) - 1)
+                markup = reply_markup if is_last else None
+                try:
+                    await query.message.reply_text(chunks[idx], reply_markup=markup, parse_mode="Markdown")
+                except Exception:
+                    try:
+                        await query.message.reply_text(chunks[idx], reply_markup=markup)
+                    except Exception:
+                        pass
 
     def _is_vip_or_admin(self, user_id: int) -> bool:
         """Check if user has active VIP status or is Super Admin."""
