@@ -369,6 +369,8 @@ class FengShuiTelegramBot:
 
         # 6. AI Models
         hf_connected = self.master.hf_bridge.is_connected()
+        gemini_pool_count = self.master.omni_bridge.gemini_pool.get_key_count()
+        gemini_active = self.master.omni_bridge.gemini_pool.is_available()
 
         return {
             "timestamp": datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC"),
@@ -390,7 +392,9 @@ class FengShuiTelegramBot:
             "disk_free_gb": round(disk_free_gb, 2),
             "disk_pct": disk.percent,
             "db_stats": db_stats,
-            "hf_connected": hf_connected
+            "hf_connected": hf_connected,
+            "gemini_active": gemini_active,
+            "gemini_keys_count": gemini_pool_count
         }
 
     async def health_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -402,7 +406,8 @@ class FengShuiTelegramBot:
         h = self.get_system_health_telemetry()
         stats = h["db_stats"]
 
-        hf_status_badge = "🟢 ONLINE (HuggingFace Cloud)" if h["hf_connected"] else "🟡 HYBRID MODE (Optimized Local Fallback)"
+        hf_status_badge = "🟢 ONLINE (HuggingFace Cloud)" if h["hf_connected"] else "🟡 HYBRID MODE (Local Optimized)"
+        gemini_badge = f"🟢 ACTIVE ({h['gemini_keys_count']} Keys in Pool)" if h["gemini_active"] else "🟡 STANDBY (Add GEMINI_API_KEYS)"
 
         msg = (
             "⚡ **SUPREME FENG SHUI AGI - LIVE SYSTEM HEALTH** ⚡\n"
@@ -423,10 +428,12 @@ class FengShuiTelegramBot:
             "💾 **៤. ទំហំថាសរឹង (Disk Storage Space):**\n"
             f"• **ទំហំសរុប (Total Disk):** `{h['disk_total_gb']} GB`\n"
             f"• **បានប្រើប្រាស់ (Used):** `{h['disk_used_gb']} GB ({h['disk_pct']}%)` | **នៅសល់:** `{h['disk_free_gb']} GB`\n\n"
-            "🤖 **៥. ម៉ូដែល AI កំពុងដំណើរការ (Running AI Models):**\n"
-            f"• 🌟 **Primary Master:** `{config.HF_MODEL_BORAMEY}`\n"
+            "🤖 **៥. ម៉ូដែល AI & Cloud Mesh (Omni Intelligence Pool):**\n"
+            f"• 🌟 **Google Gemini Mesh:** `{config.GEMINI_MODEL}`\n"
+            f"  └ ស្ថានភាព: {gemini_badge}\n"
+            f"• 🧠 **HuggingFace FS-Boramey:** `{config.HF_MODEL_BORAMEY}`\n"
             f"  └ ស្ថានភាព: {hf_status_badge}\n"
-            f"• 🧠 **Reasoner Deep Logic:** `{config.HF_MODEL_REASONER}`\n"
+            f"• 🔬 **Reasoner Deep Logic:** `{config.HF_MODEL_REASONER}`\n"
             f"• 🔍 **Vector Embedder:** `{config.HF_MODEL_EMBEDDER}`\n"
             f"• 🏛️ **Zenith 7 Pillars Matrix:** `Vision, Qi, Time, Physiognomy, Geo, Astro, Bazi` (🟢 Live)\n"
             f"• 📚 **Curriculum Master Engine:** `100 Topics / 1,000 Lessons Online`\n\n"

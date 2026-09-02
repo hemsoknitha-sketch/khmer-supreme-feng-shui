@@ -14,6 +14,7 @@ from typing import Dict, Any, List, Optional
 from config import config
 from engines.classical_calc import ClassicalCalcEngine
 from engines.hf_bridge import HuggingFaceBridge
+from engines.omni_ai_bridge import omni_ai_bridge, OmniAIBridge
 from engines.rag_client import RAGKnowledgeRetriever
 from engines.alert_predictor import AlertPredictionEngine
 from engines.chronos_cycle import ChronosCycleEngine
@@ -22,16 +23,17 @@ logger = logging.getLogger("SupremeFengShui.Master")
 
 
 class SupremeFengShuiMaster:
-    """FS-Supreme-Master: Unified Mixture of Experts (MoE) Architecture."""
+    """FS-Supreme-Master: Unified Mixture of Experts (MoE) & Multi-Cloud Omni AI Architecture."""
 
     def __init__(self, hf_token: Optional[str] = None):
         logger.info("Initializing Supreme Feng Shui Master Orchestrator...")
         self.calc_engine = ClassicalCalcEngine()
         self.hf_bridge = HuggingFaceBridge(token=hf_token)
+        self.omni_bridge = omni_ai_bridge
         self.rag_engine = RAGKnowledgeRetriever(token=hf_token)
         self.alert_predictor = AlertPredictionEngine()
         self.chronos_engine = ChronosCycleEngine()
-        logger.info("All 4 Engine Groups successfully linked to Master Orchestrator.")
+        logger.info("All 4 Engine Groups & Omni AI Mesh successfully linked to Master Orchestrator.")
 
     def consult(
         self,
@@ -82,31 +84,31 @@ class SupremeFengShuiMaster:
         relevant_docs = self.rag_engine.search_knowledge(query, top_k=3)
         knowledge_context = "\n".join([f"• [{d['category']}] {d['title']}: {d['text']}" for d in relevant_docs])
 
-        # 6. Intent Routing (Choose between FS-Boramey-7B or FS-Reasoner-7B)
-        needs_reasoning = complex_reasoning or any(
-            k in query for k in ["ហេតុអ្វី", "វិភាគស៊ីជម្រៅ", "ផ្សំតារា", "បកស្រាយ", "គណនាជោគជតារាសី", "ទិសដៅជីវិត"]
-        )
-        model_type = "reasoner" if needs_reasoning else "boramey"
-
-        # 7. Construct Verified System Context
+        # 6. Construct Verified Master System Prompt
         system_prompt = (
-            "អ្នកគឺជា FS-Supreme-Master (កំពូលបរមគ្រូបញ្ញាសិប្បនិម្មិតហុងស៊ុយខ្មែរ AGI)។ "
-            "ចូរឆ្លើយតបយ៉ាងពិរោះ ត្រឹមត្រូវតាមក្បួនខ្នាតបុរាណចិន និងខ្មែរ ដោយផ្អែកលើទិន្នន័យជាក់ស្តែងខាងក្រោម។\n\n"
+            "អ្នកគឺជា FS-Supreme-Master (កំពូលបរមគ្រូបញ្ញាសិប្បនិម្មិតហុងស៊ុយបុរាណ AGI - Master Level)។ "
+            "ចូរឆ្លើយតបយ៉ាងពិរោះ ជ្រាលជ្រៅ និងត្រឹមត្រូវតាមក្បួនខ្នាតបុរាណចិន និងខ្មែរ ដោយផ្អែកលើទិន្នន័យជាក់ស្តែងខាងក្រោម៖\n\n"
             f"[ទិន្នន័យគណនាពិតពីម៉ាស៊ីន]:\n{evidence_packet}\n\n"
-            f"[ចំណេះដឹងយោងពីបណ្ណាល័យ]:\n{knowledge_context}"
+            f"[ចំណេះដឹងយោងពីបណ្ណាល័យហុងស៊ុយបុរាណ]:\n{knowledge_context}"
         )
 
-        # 8. Generate Synthesis via Hugging Face Bridge
-        ai_response = self.hf_bridge.generate_chat(
+        # 7. Generate Supreme Synthesis via Multi-Cloud Omni AI Mesh (Gemini Multi-Key + HuggingFace + Local Core)
+        ai_response = self.omni_bridge.generate_supreme_consultation(
             system_prompt=system_prompt,
             user_prompt=query,
-            model_type=model_type
+            context_knowledge=knowledge_context
         )
+
+        model_name = "Omni-AI (Gemini Mesh + HF Boramey/Reasoner)"
+        if self.omni_bridge.gemini_pool.is_available():
+            model_name = f"Google {config.GEMINI_MODEL} (Multi-Key Pool: {self.omni_bridge.gemini_pool.get_key_count()} Keys)"
+        elif self.hf_bridge.is_connected():
+            model_name = f"HuggingFace {config.HF_MODEL_BORAMEY}"
 
         return {
             "success": True,
             "query": query,
-            "model_used": "FS-Reasoner-7B (CoT)" if model_type == "reasoner" else "FS-Boramey-7B (Generator)",
+            "model_used": model_name,
             "evidence": evidence_packet,
             "relevant_knowledge": relevant_docs,
             "synthesis": ai_response

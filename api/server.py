@@ -175,6 +175,9 @@ def health_check():
             "percent": disk.percent
         },
         "ai_models": {
+            "gemini_active": master.omni_bridge.gemini_pool.is_available(),
+            "gemini_keys_count": master.omni_bridge.gemini_pool.get_key_count(),
+            "gemini_model": config.GEMINI_MODEL,
             "hf_connected": master.hf_bridge.is_connected(),
             "primary_boramey": config.HF_MODEL_BORAMEY,
             "reasoner_deepseek": config.HF_MODEL_REASONER,

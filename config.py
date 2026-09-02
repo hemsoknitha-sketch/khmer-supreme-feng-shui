@@ -39,6 +39,24 @@ class SystemConfig:
     HF_MODEL_REASONER: str = os.getenv("HF_MODEL_REASONER", "deepseek-ai/DeepSeek-R1-Distill-Qwen-7B")
     HF_MODEL_EMBEDDER: str = os.getenv("HF_MODEL_EMBEDDER", "BAAI/bge-m3")
 
+    # Google Gemini API Multi-Key Pool & Rotation (Supports single or multiple keys comma-separated)
+    GEMINI_API_KEY: str = os.getenv("GEMINI_API_KEY", "")
+    GEMINI_API_KEYS_RAW: str = os.getenv("GEMINI_API_KEYS", "")
+    GEMINI_MODEL: str = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
+
+    @property
+    def GEMINI_KEY_POOL(self) -> List[str]:
+        """Extract and clean all available Gemini API keys into a resilient pool."""
+        keys = []
+        if self.GEMINI_API_KEY:
+            keys.append(self.GEMINI_API_KEY.strip())
+        if self.GEMINI_API_KEYS_RAW:
+            for k in self.GEMINI_API_KEYS_RAW.split(","):
+                k_clean = k.strip()
+                if k_clean and k_clean not in keys:
+                    keys.append(k_clean)
+        return keys
+
     # Custom Dedicated Endpoint URLs (Optional)
     HF_ENDPOINT_BORAMEY: str = os.getenv("HF_ENDPOINT_BORAMEY", "")
     HF_ENDPOINT_REASONER: str = os.getenv("HF_ENDPOINT_REASONER", "")
