@@ -241,7 +241,8 @@ class TestSupremeFengShuiSystem(unittest.TestCase):
 
         # Verify Report Generation
         report_a = family_synergy_engine.generate_family_synergy_report(members_a)
-        self.assertIn("របាយការណ៍ហុងស៊ុយរាសីគ្រួសាររួម", report_a)
+        self.assertIn("ក្បួនហុងស៊ុយ និងរាសីគ្រួសាររួមពេញលេញ", report_a)
+        self.assertNotIn("របាយការណ៍", report_a)
         self.assertNotIn("**", report_a)
         self.assertNotIn("==", report_a)
 
@@ -310,6 +311,55 @@ class TestSupremeFengShuiSystem(unittest.TestCase):
             self.assertFalse(re.search(r'•\s*[💰👑🎨🏛️🌌⚠️🧭⏰✨💊💡🌿💼💖🌸☀️🍂❄️🧹🍎🏮🚫]', txt), f"{name} must not have double bullets")
             # 6. No double section headers (e.g. 📜 ១.)
             self.assertFalse(re.search(r'[📜🧭⏰💊📊💡👑🗓️]\s*[១២៣៤៥៦៧៨៩០]+\.', txt), f"{name} must not have double section headers")
+
+    # 17. Test Universal System-Wide 3,500-4,000 Characters Standard Across All AI & Analytical Engines
+    def test_17_all_ai_models_and_engines_3500_4000_chars_standard(self):
+        """Verify that ALL AI response functions & analytical engines produce 3500-4000 chars in pure Khmer typography."""
+        from engines.family_synergy_engine import family_synergy_engine
+        from engines.curriculum_engine import curriculum_engine
+        from engines.vision_3d_engine import vision_3d_engine
+        from engines.omni_ai_bridge import omni_ai_bridge
+        from engines.mahasneh_love_engine import mahasneh_love_engine
+        import re
+
+        # 1. Family Synergy Engine
+        fam_members = [
+            {"relation_type": "self", "relation_label": "ខ្ញុំ (មេគ្រួសារ)", "birth_date": "1988-08-18", "birth_time": "08:30", "gender": "male", "day_master": "Wood", "zodiac_animal": "Dragon", "life_gua": 3},
+            {"relation_type": "spouse", "relation_label": "ភរិយា", "birth_date": "1990-12-05", "birth_time": "14:20", "gender": "female", "day_master": "Fire", "zodiac_animal": "Horse", "life_gua": 8}
+        ]
+        fam_report = family_synergy_engine.generate_family_synergy_report(fam_members)
+
+        # 2. Curriculum Deep Master Explanation
+        curr_res = curriculum_engine.generate_deep_explanation(1)
+        curr_text = curr_res["deep_explanation"]
+
+        # 3. Vision Multimodal Audit Report
+        vision_report = vision_3d_engine.generate_detailed_vision_audit()
+
+        # 4. Omni AI Consultation Engine
+        ai_consult = omni_ai_bridge.generate_supreme_consultation("", "តើគួររៀបចំបន្ទប់គេងយ៉ាងដូចម្តេច?")
+
+        # 5. Maha Sneh Love Engine
+        love_res = mahasneh_love_engine.analyze_love_profile("1990-05-15", "male")
+        love_report = love_res.get("treatise", "")
+
+        all_outputs = [
+            ("Family Synergy", fam_report),
+            ("Curriculum Lesson", curr_text),
+            ("Vision Audit", vision_report),
+            ("Omni AI Consult", ai_consult),
+            ("Love Treatise", love_report)
+        ]
+
+        for name, txt in all_outputs:
+            self.assertTrue(3500 <= len(txt) <= 4000, f"{name} length is {len(txt)}, expected 3500-4000")
+            self.assertNotIn("**", txt, f"{name} contains **")
+            self.assertNotIn("++", txt, f"{name} contains ++")
+            self.assertNotIn("==", txt, f"{name} contains ==")
+            self.assertNotIn("របាយការណ៍", txt, f"{name} contains របាយការណ៍")
+            self.assertFalse(re.search(r'[a-zA-Z]', txt), f"{name} contains English: {re.findall(r'[a-zA-Z]+', txt)}")
+            self.assertFalse(re.search(r'•\s*[💰👑🎨🏛️🌌⚠️🧭⏰✨💊💡🌿💼💖🌸☀️🍂❄️🧹🍎🏮🚫⚖️🤝🛏️👤⛰️💨⏳🔮📖📐🖼️👁️❓]', txt), f"{name} contains double bullets")
+            self.assertFalse(re.search(r'[📜🧭⏰💊📊💡👑🗓️⚖️🤝🛏️📖🖼️👁️]\s*[១២៣៤៥៦៧៨៩០]+\.', txt), f"{name} contains double section headers")
 
 
 if __name__ == "__main__":
