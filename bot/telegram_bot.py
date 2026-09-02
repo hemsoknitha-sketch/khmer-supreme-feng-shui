@@ -175,16 +175,24 @@ class FengShuiTelegramBot:
             return
 
         text = (
+            f"🌟 **SUPREME FENG SHUI AGI (Master Level v1.0.0)**\n"
             f"📚 **{lesson['title_kh']}**\n"
             f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
             f"🏷️ **ផ្នែក:** {lesson['category_icon']} {lesson['category_name']}\n"
             f"📌 **ប្រធានបទធំ:** {lesson['topic_title_kh']}\n"
-            f"🎯 **ប្រធានបទរង:** {lesson['sub_topic_kh']}\n\n"
-            f"📖 **១. ទ្រឹស្តី និងនិយមន័យក្បួន:**\n{lesson['classical_rule']}\n\n"
-            f"📐 **២. រូបមន្តគណិតវិទ្យាហុងស៊ុយ:**\n`{lesson['formula']}`\n\n"
-            f"💡 **៣. ការអនុវត្តជាក់ស្តែង & ដំណោះស្រាយ:**\n{lesson['practical_remedy']}\n\n"
+            f"🎯 **ប្រធានបទរង:** {lesson['sub_topic_kh']}\n"
+            f"🏛️ **សសរស្តម្ភសកម្ម:** `{lesson.get('active_pillar', '7 Pillars Core')}`\n\n"
+            f"📜 **១. គម្ពីរ និងទស្សនវិជ្ជាគ្រឹះ:**\n{lesson['classical_rule']}\n\n"
+            f"📐 **២. រូបមន្តគណិតវិទ្យា & ឡូប៉ាន ២៤ ភ្នំ:**\n`{lesson['formula']}`\n\n"
+            f"🏛️ **៣. ការវិភាគ ៧ សសរស្តម្ភ AGI:**\n"
+            f"• ⛰️ **Geo / Landform:** {lesson.get('geo_analysis', '')}\n"
+            f"• 💨 **Qi Dynamics:** {lesson.get('qi_analysis', '')}\n"
+            f"• ⏳ **Period 9 (2024-2043):** {lesson.get('time_analysis', '')}\n"
+            f"• 🔮 **BaZi Synergy:** {lesson.get('bazi_synergy', '')}\n\n"
+            f"💡 **៤. ការអនុវត្តជាក់ស្តែង & ដំណោះស្រាយ:**\n{lesson['practical_remedy']}\n\n"
+            f"⚠️ **៥. ចំណុចហាមឃាត់ (Taboos):**\n{lesson.get('taboo_warning', '')}\n\n"
             f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            f"🔢 *មេរៀន {lesson['lesson_id']}/1000 | យុគទី ៩ (Period 9: 2024-2043)*"
+            f"🔢 *មេរៀន {lesson['lesson_id']}/1000 | ដំណើរការដោយ 99 Specialized Components*"
         )
 
         nav_row = []

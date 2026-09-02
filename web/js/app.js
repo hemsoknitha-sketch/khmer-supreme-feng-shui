@@ -393,14 +393,26 @@ async function loadLessonDetails(lessonId) {
         const res = await fetch(`/api/curriculum/lesson/${lessonId}`);
         const json = await res.json();
         if (json.success) {
-            const les = json.data;
+            const pillarBadge = document.getElementById('lessonPillarBadge');
+            const pGeo = document.getElementById('pillarGeo');
+            const pQi = document.getElementById('pillarQi');
+            const pTime = document.getElementById('pillarTime');
+            const pBaZi = document.getElementById('pillarBaZi');
+            const tabooEl = document.getElementById('lessonTaboo');
+
             if (titleEl) titleEl.innerText = les.title_kh;
             if (badgeEl) badgeEl.innerText = `មេរៀន ${les.lesson_id}/1000`;
             if (catBadge) catBadge.innerText = `${les.category_icon} ${les.category_name}`;
             if (topicBadge) topicBadge.innerText = `ប្រធានបទទី ${les.topic_id}: ${les.topic_title_kh}`;
+            if (pillarBadge) pillarBadge.innerText = les.active_pillar || "🏛️ 7 Pillars Core";
             if (ruleEl) ruleEl.innerText = les.classical_rule;
             if (formulaEl) formulaEl.innerText = les.formula;
             if (remedyEl) remedyEl.innerText = les.practical_remedy;
+            if (pGeo) pGeo.innerText = les.geo_analysis || "ស្របតាមរាងទ្រង់ដី និងជញ្ជាំងអគារ";
+            if (pQi) pQi.innerText = les.qi_analysis || "លំហូរខ្យល់ដង្ហើម Sheng Qi វិជ្ជមាន";
+            if (pTime) pTime.innerText = les.time_analysis || "យុគទី ៩ (2024-2043) Li Fire";
+            if (pBaZi) pBaZi.innerText = les.bazi_synergy || "ទ្រទ្រង់ធាតុ Yong Shen នៃម្ចាស់ជោគជតា";
+            if (tabooEl) tabooEl.innerText = les.taboo_warning || "ជៀសវាងការប៉ះទង្គិចធាតុ";
 
             if (prevBtn) prevBtn.disabled = !les.prev_lesson_id;
             if (nextBtn) nextBtn.disabled = !les.next_lesson_id;
