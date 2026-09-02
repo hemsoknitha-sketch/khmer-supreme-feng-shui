@@ -158,6 +158,7 @@ class DatabaseManager:
                         user["username"] = username
                         user["full_name"] = full_name
 
+                    user["is_new_user"] = False
                     return user
                 else:
                     # Create new user
@@ -184,7 +185,8 @@ class DatabaseManager:
                         "last_query_date": today_str,
                         "total_queries": 0,
                         "created_at": now_str,
-                        "updated_at": now_str
+                        "updated_at": now_str,
+                        "is_new_user": True
                     }
         except Exception as e:
             logger.error(f"Error in get_or_create_user: {e}")

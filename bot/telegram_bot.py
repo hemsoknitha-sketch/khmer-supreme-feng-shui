@@ -157,6 +157,10 @@ class FengShuiTelegramBot:
             full_name=from_user.full_name or ""
         )
 
+        # Notify Super Admin immediately if a new user joins!
+        if user.get("is_new_user"):
+            asyncio.create_task(self._notify_admin_new_user(context, from_user, user))
+
         tier_badges = {
             "free": "✨ សមាជិកទូទៅ (Free Member)",
             "monthly": "🌟 VIP ប្រចាំខែ (Monthly VIP)",
@@ -181,6 +185,53 @@ class FengShuiTelegramBot:
             "👇 **សូមចុចប៊ូតុងខាងក្រោមដើម្បីចាប់ផ្តើមប្រើប្រាស់ភ្លាមៗ:**"
         )
         await self._safe_reply(update.message, welcome_text, reply_markup=self._get_main_keyboard(from_user.id))
+
+    async def _notify_admin_new_user(self, context: ContextTypes.DEFAULT_TYPE, from_user, user_data: Dict[str, Any]):
+        """Send instantaneous rich alert to Super Admin whenever a new user starts the bot."""
+        admin_ids = config.ADMIN_USER_IDS
+        if not admin_ids or from_user.id in admin_ids:
+            return
+
+        stats = self.db.get_system_stats()
+        now_str = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
+        username_str = f"@{from_user.username}" if from_user.username else "គ្មាន (No Username)"
+        lang_str = from_user.language_code or "មិនស្គាល់ (Unknown)"
+
+        alert_text = (
+            "🔔 **សេចក្តីជូនដំណឹង៖ មានអ្នកប្រើប្រាស់ថ្មីទើបតែចុច /start** 🔔\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            f"👤 **ឈ្មោះពេញ:** `{from_user.full_name}`\n"
+            f"🆔 **Telegram ID:** `{from_user.id}`\n"
+            f"🌐 **Username:** {username_str}\n"
+            f"🗣️ **ភាសាទូរស័ព្ទ:** `{lang_str}`\n"
+            f"⏱️ **កាលបរិច្ឆេទ:** `{now_str}`\n"
+            f"🏷️ **កម្រិតបច្ចុប្បន្ន:** `✨ សមាជិកឥតគិតថ្លៃ (Free - {config.MAX_FREE_DAILY_QUERIES} សំណួរ/ថ្ងៃ)`\n\n"
+            f"📊 **ស្ថិតិប្រព័ន្ធសរុប (Live System Stats):**\n"
+            f"• 👥 **អ្នកប្រើប្រាស់សរុប:** `{stats['total_users']}` នាក់\n"
+            f"• 👑 **សមាជិក VIP សកម្ម:** `{stats['total_vips']}` នាក់\n\n"
+            "⚡ **ផ្តល់សិទ្ធិ VIP ជូនគាត់ភ្លាមៗ (1-Click Quick Actions):**"
+        )
+
+        keyboard = [
+            [
+                InlineKeyboardButton("🌟 ផ្តល់ VIP 1 ខែ", callback_data=f"adm_give_{from_user.id}_monthly"),
+                InlineKeyboardButton("👑 ផ្តល់ VIP 1 ឆ្នាំ", callback_data=f"adm_give_{from_user.id}_yearly")
+            ],
+            [
+                InlineKeyboardButton("💎 ផ្តល់ VIP មួយជីវិត", callback_data=f"adm_give_{from_user.id}_lifetime")
+            ]
+        ]
+
+        for admin_id in admin_ids:
+            try:
+                await context.bot.send_message(
+                    chat_id=admin_id,
+                    text=alert_text,
+                    parse_mode="Markdown",
+                    reply_markup=InlineKeyboardMarkup(keyboard)
+                )
+            except Exception as e:
+                logger.warning(f"Could not send new user alert to admin {admin_id}: {e}")
 
     async def vip_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /vip command to display subscription status & upgrade options."""
@@ -1419,6 +1470,52 @@ class FengShuiTelegramBot:
                     )
                 except Exception:
                     await self._safe_edit(query, caption, reply_markup=InlineKeyboardMarkup(keyboard))
+
+            elif data.startswith("adm_give_"):
+                parts = data.split("_")
+                if len(parts) == 4:
+                    target_id = int(parts[2])
+                    tier = parts[3]
+                    admin_id = from_user.id
+
+                    if admin_id in config.ADMIN_USER_IDS:
+                        res = self.db.set_user_vip_manually(target_id, tier, admin_id=admin_id)
+                        if res["success"]:
+                            tier_names = {
+                                "monthly": "🌟 VIP 1 ខែ (Monthly VIP)",
+                                "yearly": "👑 VIP 1 ឆ្នាំ (Yearly VIP)",
+                                "lifetime": "💎 VIP មួយជីវិត (Lifetime VIP)"
+                            }
+                            tier_kh = tier_names.get(tier, tier)
+
+                            await self._safe_edit(
+                                query,
+                                f"✅ **បានផ្តល់សិទ្ធិ VIP ជូនអ្នកប្រើប្រាស់ជោគជ័យ!**\n"
+                                f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                                f"• **Telegram ID:** `{target_id}`\n"
+                                f"• **កម្រិតដែលបានផ្តល់:** **{tier_kh}**\n"
+                                f"• **កាលបរិច្ឆេទផុតកំណត់:** `{res['expiry']}`"
+                            )
+
+                            # Notify target user directly!
+                            try:
+                                vip_notice = (
+                                    f"🎉 **អបអរសាទរ! Super Admin បានតម្លើងគណនីរបស់អ្នកជាសមាជិក VIP!** 🎉\n"
+                                    f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                                    f"👑 **កម្រិត VIP របស់អ្នក:** **{tier_kh}**\n"
+                                    f"✨ **សិទ្ធិពិសេស:** សួរគ្រូហុងស៊ុយ AI បាន **គ្មានដែនកំណត់ 24/7/365**!\n\n"
+                                    f"👉 សូមវាយសំណួររបស់អ្នក ឬចុចប៊ូតុងខាងក្រោមដើម្បីចាប់ផ្តើម!"
+                                )
+                                await context.bot.send_message(
+                                    chat_id=target_id,
+                                    text=vip_notice,
+                                    parse_mode="Markdown",
+                                    reply_markup=self._get_main_keyboard(target_id)
+                                )
+                            except Exception as e_user:
+                                logger.warning(f"Could not notify target user {target_id}: {e_user}")
+                        else:
+                            await self._safe_edit(query, f"❌ កំហុស៖ {res.get('error')}")
 
             elif data == "menu_health":
                 await self.health_command(update, context)
