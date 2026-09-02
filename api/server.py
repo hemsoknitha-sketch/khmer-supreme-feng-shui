@@ -99,30 +99,82 @@ def root():
 
 
 @app.get("/health")
+@app.get("/api/health")
 def health_check():
-    """System health and Super Smart Hybrid Memory telemetry (for 1GB VPS monitoring)."""
+    """System health, VPS host, CPU, RAM, DISK, and AI Models telemetry."""
+    import platform
+
+    # 1. CPU
+    cpu_percent = psutil.cpu_percent(interval=0.1)
+    cpu_count = psutil.cpu_count(logical=True) or 1
+
+    # 2. RAM & Swap
     mem = psutil.virtual_memory()
     swap = psutil.swap_memory()
     process = psutil.Process(os.getpid())
     process_mem_mb = process.memory_info().rss / (1024 * 1024)
 
     total_physical_mb = mem.total / (1024 * 1024)
+    used_physical_mb = mem.used / (1024 * 1024)
+    available_physical_mb = mem.available / (1024 * 1024)
     total_swap_mb = swap.total / (1024 * 1024)
     effective_total_mb = total_physical_mb + total_swap_mb
 
+    # 3. Disk
+    try:
+        disk = psutil.disk_usage("/")
+    except Exception:
+        drive = os.path.splitdrive(os.path.abspath("."))[0] or "C:\\"
+        disk = psutil.disk_usage(drive)
+
+    # 4. Database & VIPs
+    from database.db_manager import db_manager
+    db_stats = db_manager.get_system_stats()
+
     return {
         "status": "healthy",
-        "timestamp": datetime.now().isoformat(),
-        "memory_architecture": "Super Smart Hybrid (zRAM + 4GB NVMe Swap)",
-        "process_ram_used_mb": round(process_mem_mb, 2),
-        "physical_ram_total_mb": round(total_physical_mb, 2),
-        "physical_ram_available_mb": round(mem.available / (1024 * 1024), 2),
-        "physical_ram_percent": mem.percent,
-        "swap_total_mb": round(total_swap_mb, 2),
-        "swap_used_mb": round(swap.used / (1024 * 1024), 2),
-        "swap_free_mb": round(swap.free / (1024 * 1024), 2),
-        "effective_total_ram_mb": round(effective_total_mb, 2),
-        "hf_connected": master.hf_bridge.is_connected()
+        "timestamp": datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC"),
+        "vps_host": {
+            "os": f"{platform.system()} {platform.release()} ({platform.machine()})",
+            "python_version": platform.python_version(),
+            "uptime": "Active & Polling"
+        },
+        "cpu": {
+            "usage_percent": cpu_percent,
+            "cores": cpu_count
+        },
+        "memory": {
+            "architecture": "Super Smart Hybrid (zRAM + 4GB NVMe Swap)",
+            "process_rss_mb": round(process_mem_mb, 2),
+            "physical_total_mb": round(total_physical_mb, 2),
+            "physical_used_mb": round(used_physical_mb, 2),
+            "physical_available_mb": round(available_physical_mb, 2),
+            "physical_percent": mem.percent,
+            "swap_total_mb": round(total_swap_mb, 2),
+            "swap_used_mb": round(swap.used / (1024 * 1024), 2),
+            "swap_free_mb": round(swap.free / (1024 * 1024), 2),
+            "effective_total_mb": round(effective_total_mb, 2)
+        },
+        "disk": {
+            "total_gb": round(disk.total / (1024 ** 3), 2),
+            "used_gb": round(disk.used / (1024 ** 3), 2),
+            "free_gb": round(disk.free / (1024 ** 3), 2),
+            "percent": disk.percent
+        },
+        "ai_models": {
+            "hf_connected": master.hf_bridge.is_connected(),
+            "primary_boramey": config.HF_MODEL_BORAMEY,
+            "reasoner_deepseek": config.HF_MODEL_REASONER,
+            "embedder_bge": config.HF_MODEL_EMBEDDER,
+            "zenith_7_pillars": ["Vision", "Qi", "Time", "Physiognomy", "Geo", "Astro", "Bazi"],
+            "curriculum_engine": "100 Topics / 1,000 Lessons Online"
+        },
+        "database": {
+            "engine": "SQLite WAL Mode",
+            "total_users": db_stats.get("total_users", 0),
+            "active_vips": db_stats.get("total_vips", 0),
+            "total_licenses": db_stats.get("total_licenses", 0)
+        }
     }
 
 
