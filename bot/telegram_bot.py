@@ -33,6 +33,7 @@ from engines.vision_3d_engine import vision_3d_engine
 from engines.backup_engine import backup_engine
 from engines.mahasneh_love_engine import mahasneh_love_engine
 from engines.celestial_astrology_engine import CelestialAstrologyEngine
+from engines.family_synergy_engine import family_synergy_engine
 from database.db_manager import db_manager
 
 logger = logging.getLogger("SupremeFengShui.TelegramBot")
@@ -67,6 +68,7 @@ class FengShuiTelegramBot:
         self.backup = backup_engine
         self.love = mahasneh_love_engine
         self.celestial = CelestialAstrologyEngine()
+        self.family = family_synergy_engine
 
     def _chunk_text(self, text: str, max_chunk: int = 3900) -> List[str]:
         """Split long text into clean chunks at natural paragraph boundaries or dividers."""
@@ -74,46 +76,43 @@ class FengShuiTelegramBot:
             return [text]
 
         chunks = []
-        current = ""
-        paragraphs = text.split("\n\n")
+        remaining = text.strip()
+        while len(remaining) > max_chunk:
+            split_idx = remaining.rfind("\n\n", 0, max_chunk)
+            if split_idx == -1 or split_idx < max_chunk // 2:
+                split_idx = remaining.rfind("\n", 0, max_chunk)
+            if split_idx == -1 or split_idx < max_chunk // 2:
+                split_idx = remaining.rfind(" ", 0, max_chunk)
+            if split_idx == -1:
+                split_idx = max_chunk
 
-        for p in paragraphs:
-            if len(current) + len(p) + 2 <= max_chunk:
-                current = f"{current}\n\n{p}" if current else p
-            else:
-                if current:
-                    chunks.append(current.strip())
-                if len(p) > max_chunk:
-                    for i in range(0, len(p), max_chunk):
-                        chunks.append(p[i:i + max_chunk].strip())
-                    current = ""
-                else:
-                    current = p
+            chunk = remaining[:split_idx].strip()
+            if chunk:
+                chunks.append(chunk)
+            remaining = remaining[split_idx:].strip()
 
-        if current:
-            chunks.append(current.strip())
+        if remaining:
+            chunks.append(remaining)
         return chunks
 
     async def _safe_reply(self, message, text: str, reply_markup=None):
-        """Safely send markdown text, automatically redacting secrets, chunking long treatises (>4000 chars), falling back to plain text, and guarding Telegram limits."""
+        """Safely reply with automatic markdown fallback and multi-message pagination for long text."""
         text = self.security.redact_secrets(text)
         chunks = self._chunk_text(text, max_chunk=3900)
-
         last_msg = None
+
         for idx, chunk in enumerate(chunks):
             is_last = (idx == len(chunks) - 1)
             markup = reply_markup if is_last else None
+
             try:
                 last_msg = await message.reply_text(chunk, reply_markup=markup, parse_mode="Markdown")
             except Exception as e:
-                logger.debug(f"Markdown parse fallback for reply: {e}")
+                logger.debug(f"Markdown parse fallback for chunk {idx}: {e}")
                 try:
                     last_msg = await message.reply_text(chunk, reply_markup=markup)
                 except Exception as e2:
                     logger.error(f"Failed to reply chunk {idx}: {e2}")
-
-            if not is_last:
-                await asyncio.sleep(0.3)
         return last_msg
 
     async def _safe_edit(self, query, text: str, reply_markup=None):
@@ -169,6 +168,7 @@ class FengShuiTelegramBot:
             "• 🧠 សួរគ្រូហុងស៊ុយ AI គ្មានដែនកំណត់ ២៤/៧/៣៦៥\n"
             "• 📚 កម្មវិធីសិក្សា ១០០ ប្រធានបទ & ១០០០ មេរៀនស៊ីជម្រៅ\n"
             "• 🧭 គណនា Life Gua, តារាហោះ យុគ ៩, BaZi ៤ សសរ & ១០ Gods\n"
+            "• 👨‍👩‍👧‍👦 កត់ត្រាទិន្នន័យគ្រួសារ និងវិភាគរាសីរួម (Pillar 10 Synergy)\n"
             "• 📸 ស្កេនពិនិត្យរូបភាពបន្ទប់/ផ្ទះរក Sha Qi & វិធីកែខៃ\n"
             "• 🎨 បង្កើតប្លង់ហុងស៊ុយ 3D 4K Photorealistic\n\n"
             "👉 **សូមទាក់ទងមកកាន់ SUPER ADMIN ផ្ទាល់ដើម្បីភ្ជាប់សេវាកម្ម VIP ភ្លាមៗ:**\n"
@@ -180,12 +180,16 @@ class FengShuiTelegramBot:
             [
                 InlineKeyboardButton("🎟️ បញ្ចូល Key អាជ្ញាប័ណ្ណ", callback_data="vip_redeem_prompt"),
                 InlineKeyboardButton("💎 អត្ថប្រយោជន៍ VIP", callback_data="vip_perks_info")
+            ],
+            [
+                InlineKeyboardButton("⚡ ស្ថានភាពប្រព័ន្ធ", callback_data="menu_health"),
+                InlineKeyboardButton("❓ ជំនួយ (Help)", callback_data="menu_help")
             ]
         ]
-        if hasattr(message_or_query, "edit_message_text"):
-            await self._safe_edit(message_or_query, msg, reply_markup=InlineKeyboardMarkup(keyboard))
-        else:
+        if hasattr(message_or_query, "reply_text"):
             await self._safe_reply(message_or_query, msg, reply_markup=InlineKeyboardMarkup(keyboard))
+        else:
+            await self._safe_edit(message_or_query, msg, reply_markup=InlineKeyboardMarkup(keyboard))
 
     def _get_main_keyboard(self, user_id: int = 0) -> InlineKeyboardMarkup:
         """Construct role-based interactive keyboard: Super Admin vs VIP vs Free/Unactivated."""
@@ -205,7 +209,11 @@ class FengShuiTelegramBot:
                     InlineKeyboardButton("📊 ទស្សន៍ទាយសំណាង", callback_data="menu_predict")
                 ],
                 [
-                    InlineKeyboardButton("💖 ហុងស៊ុយ & មហាស្នេហ៍", callback_data="menu_love"),
+                    InlineKeyboardButton("👨‍👩‍👧‍👦 ហុងស៊ុយគ្រួសាររួម (/data)", callback_data="fam_list"),
+                    InlineKeyboardButton("💖 ហុងស៊ុយ & មហាស្នេហ៍", callback_data="menu_love")
+                ],
+                [
+                    InlineKeyboardButton("🌌 ហោរាសាស្ត្រ & ហុងស៊ុយ", callback_data="menu_celestial"),
                     InlineKeyboardButton("🎨 បង្កើតប្លង់ 3D 4K", callback_data="menu_render3d")
                 ],
                 [
@@ -230,18 +238,19 @@ class FengShuiTelegramBot:
                     InlineKeyboardButton("📊 ទស្សន៍ទាយសំណាង", callback_data="menu_predict")
                 ],
                 [
-                    InlineKeyboardButton("🌌 ហោរាសាស្ត្រ & ហុងស៊ុយ", callback_data="menu_celestial"),
+                    InlineKeyboardButton("👨‍👩‍👧‍👦 ហុងស៊ុយគ្រួសាររួម (/data)", callback_data="fam_list"),
                     InlineKeyboardButton("💖 ហុងស៊ុយ & មហាស្នេហ៍", callback_data="menu_love")
                 ],
                 [
-                    InlineKeyboardButton("🎨 បង្កើតប្លង់ 3D 4K", callback_data="menu_render3d"),
-                    InlineKeyboardButton("💬 សួរគ្រូហុងស៊ុយ AI", callback_data="menu_ask")
+                    InlineKeyboardButton("🌌 ហោរាសាស្ត្រ & ហុងស៊ុយ", callback_data="menu_celestial"),
+                    InlineKeyboardButton("🎨 បង្កើតប្លង់ 3D 4K", callback_data="menu_render3d")
                 ],
                 [
-                    InlineKeyboardButton("👑 ស្ថានភាព VIP របស់ខ្ញុំ", callback_data="menu_vip"),
-                    InlineKeyboardButton("⚡ ស្ថានភាពប្រព័ន្ធ", callback_data="menu_health")
+                    InlineKeyboardButton("💬 សួរគ្រូហុងស៊ុយ AI", callback_data="menu_ask"),
+                    InlineKeyboardButton("👑 ស្ថានភាព VIP របស់ខ្ញុំ", callback_data="menu_vip")
                 ],
                 [
+                    InlineKeyboardButton("⚡ ស្ថានភាពប្រព័ន្ធ", callback_data="menu_health"),
                     InlineKeyboardButton("❓ ជំនួយ (Help)", callback_data="menu_help")
                 ]
             ]
@@ -271,6 +280,8 @@ class FengShuiTelegramBot:
             BotCommand("almanac", "📜 ក្បួនតម្រាខ្មែរ & Tung Shu ប្រចាំថ្ងៃ"),
             BotCommand("setbirth", "⚙️ កំណត់ម៉ោង & ថ្ងៃខែឆ្នាំកំណើត"),
             BotCommand("settimezone", "🌐 កំណត់តំបន់ម៉ោង (ឧ. /tz Paris)"),
+            BotCommand("data", "👨‍👩‍👧‍👦 កត់ត្រាទិន្នន័យគ្រួសារ (ឧ. /data ប្រពន្ធ 1992-08-20)"),
+            BotCommand("family", "📜 មើលរបាយការណ៍រាសីគ្រួសាររួម (Unified Synergy)"),
             BotCommand("love", "💖 ហុងស៊ុយ & មហាស្នេហ៍ (Peach Blossom)"),
             BotCommand("render3d", "🎨 បង្កើតប្លង់ 3D 4K & ពិនិត្យរូបភាព"),
             BotCommand("health", "⚡ ត្រួតពិនិត្យសុខភាព VPS, CPU, RAM, Disk, AI"),
@@ -1465,6 +1476,166 @@ class FengShuiTelegramBot:
             context, from_user, f"/love {' '.join(args)}", msg, service_type="💖 ក្បួនហុងស៊ុយ និងមហាស្នេហ៍"
         ))
 
+    # ==================== PILLAR 10 FAMILY SYNERGY & DATA COMMANDS ====================
+
+    async def data_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """
+        Handle /data and /family commands (Pillar 10: Multi-Member Household BaZi & Synergy).
+        Allows unlimited dependent family member registration (Self, Spouse, Children, Parents, etc.)
+        with 100% data segregation per user_id, Main User Tai Chi Dominance, and Unified Synergy Report.
+        """
+        from_user = update.effective_user
+        if not self._is_vip_or_admin(from_user.id):
+            await self._send_vip_required_notice(update.message, from_user.id)
+            return
+
+        args = context.args or []
+        user_id = from_user.id
+
+        # 1. If no args or args is 'list' or 'មើល' -> Show Unified Family Synergy Report or Guide
+        if not args or args[0].lower() in ["list", "view", "មើល", "show"]:
+            members = self.db.get_family_members(user_id)
+            if not members:
+                guide_text = (
+                    "👨‍👩‍👧‍👦 **ប្រព័ន្ធកត់ត្រាទិន្នន័យគ្រួសារ និងសមាជិករួមបន្ទុក ឥតដែនកំណត់ (PILLAR 10)** 👨‍👩‍👧‍👦\n"
+                    "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                    "ដើម្បីឱ្យការទស្សទាយ និងការរៀបចំហុងស៊ុយគេហដ្ឋានមានភាពសុក្រិតឥតខ្ចោះ "
+                    "លោកអ្នកអាចបញ្ចូលទិន្នន័យ ម៉ោង ថ្ងៃខែឆ្នាំកំណើត របស់ខ្លួនឯង និងសមាជិកគ្រួសារទាំងអស់បានឥតដែនកំណត់៖\n\n"
+                    "🌟 **ទម្រង់ពាក្យបញ្ជា (Format):**\n"
+                    "`/data <តួនាទី> <YYYY-MM-DD> [HH:MM] [male/female] [ឈ្មោះ]`\n\n"
+                    "💡 **ឧទាហរណ៍ជាក់ស្តែង៖**\n"
+                    "• ខ្លួនឯង: `/data ខ្ញុំ 1990-05-15 08:30 male`\n"
+                    "• ភរិយា: `/data ប្រពន្ធ 1992-08-20 14:00 female ចិន្តា`\n"
+                    "• ស្វាមី: `/data ប្តី 1988-11-12 06:00 male សុខា`\n"
+                    "• កូនស្រី: `/data កូនស្រី 2018-03-10 09:15 female រចនា`\n"
+                    "• កូនប្រុស: `/data កូនប្រុស 2021-07-25 11:30 male វិបុល`\n"
+                    "• ឪពុក: `/data ឪពុក 1960-01-05 06:00 male`\n"
+                    "• ម្តាយ: `/data ម្តាយ 1965-09-18 16:20 female`\n\n"
+                    "🔍 **ពាក្យបញ្ជាបន្ថែម:**\n"
+                    "• មើលតារាងគ្រួសារ: `/family` ឬ `/data list`\n"
+                    "• លុបសមាជិក: `/data delete <តួនាទី>` (ឧទាហរណ៍: `/data delete កូនស្រី`)\n"
+                    "• សម្អាតទាំងអស់: `/data clear`\n\n"
+                    "🔒 *ទិន្នន័យទាំងអស់ត្រូវបានរក្សាទុកដោយឡែក ១០០% តាម Telegram User ID របស់អ្នក!*"
+                )
+                keyboard = [
+                    [InlineKeyboardButton("💬 សួរគ្រូហុងស៊ុយ AI", callback_data="menu_ask")],
+                    [InlineKeyboardButton("🏠 ម៉ឺនុយដើម", callback_data="menu_main")]
+                ]
+                await self._safe_reply(update.message, guide_text, reply_markup=InlineKeyboardMarkup(keyboard))
+                return
+
+            # Generate Report
+            report = self.family.generate_family_synergy_report(members)
+            keyboard = [
+                [
+                    InlineKeyboardButton("➕ បន្ថែមសមាជិក", callback_data="fam_add_prompt"),
+                    InlineKeyboardButton("🗑️ សម្អាតបញ្ជី", callback_data="fam_clear_confirm")
+                ],
+                [
+                    InlineKeyboardButton("💬 សួរគ្រូហុងស៊ុយអំពីគ្រួសារ", callback_data="menu_ask"),
+                    InlineKeyboardButton("🏠 ម៉ឺនុយដើម", callback_data="menu_main")
+                ]
+            ]
+            await self._safe_reply(update.message, report, reply_markup=InlineKeyboardMarkup(keyboard))
+            return
+
+        # 2. Clear command
+        if args[0].lower() in ["clear", "reset", "លុបទាំងអស់"]:
+            self.db.clear_family_members(user_id)
+            msg = "✅ **បានសម្អាតទិន្នន័យសមាជិកគ្រួសារទាំងអស់ដោយជោគជ័យ!**"
+            keyboard = [
+                [InlineKeyboardButton("➕ បញ្ចូលទិន្នន័យជាថ្មី", callback_data="fam_add_prompt")],
+                [InlineKeyboardButton("🏠 ម៉ឺនុយដើម", callback_data="menu_main")]
+            ]
+            await self._safe_reply(update.message, msg, reply_markup=InlineKeyboardMarkup(keyboard))
+            return
+
+        # 3. Delete specific member
+        if args[0].lower() in ["delete", "remove", "del", "លុប"] and len(args) > 1:
+            rel_arg = args[1]
+            rel_type, rel_label, _ = self.family.parse_relation(rel_arg)
+            deleted = self.db.delete_family_member(user_id, relation_type=rel_type)
+            if deleted:
+                msg = f"✅ **បានលុបទិន្នន័យ {rel_label} ចេញពីប្រព័ន្ធដោយជោគជ័យ!**"
+            else:
+                msg = f"❌ **រកមិនឃើញទិន្នន័យ {rel_arg} នៅក្នុងបញ្ជីគ្រួសាររបស់អ្នកឡើយ។**"
+            keyboard = [
+                [InlineKeyboardButton("📜 មើលបញ្ជីគ្រួសារ", callback_data="fam_list")],
+                [InlineKeyboardButton("🏠 ម៉ឺនុយដើម", callback_data="menu_main")]
+            ]
+            await self._safe_reply(update.message, msg, reply_markup=InlineKeyboardMarkup(keyboard))
+            return
+
+        # 4. Parse adding a family member: /data <relation> <birth_date> [birth_time] [gender] [name]
+        try:
+            rel_arg = args[0]
+            rel_type, rel_label, default_gender = self.family.parse_relation(rel_arg)
+
+            if len(args) < 2:
+                await self._safe_reply(update.message, "❌ សូមបញ្ចូលថ្ងៃខែឆ្នាំកំណើត៖ `/data <តួនាទី> <YYYY-MM-DD> [HH:MM] [male/female]`")
+                return
+
+            birth_date = args[1]
+            birth_time = "12:00"
+            gender = default_gender
+            name = None
+
+            remaining = args[2:]
+            for token in remaining:
+                if ":" in token or ("." in token and len(token) <= 5):
+                    birth_time = token.replace(".", ":")
+                elif token.lower() in ["male", "m", "ប្រុស", "boy", "man"]:
+                    gender = "male"
+                elif token.lower() in ["female", "f", "ស្រី", "girl", "woman"]:
+                    gender = "female"
+                else:
+                    name = token if not name else f"{name} {token}"
+
+            profile = self.family.calculate_member_profile(birth_date, birth_time, gender)
+
+            self.db.upsert_family_member(
+                telegram_id=user_id,
+                relation_type=rel_type,
+                relation_label=rel_label,
+                birth_date=birth_date,
+                birth_time=birth_time,
+                gender=gender,
+                name=name,
+                day_master=profile["day_master"],
+                useful_god=profile["useful_god"],
+                zodiac_animal=profile["zodiac_animal"],
+                life_gua=profile["life_gua"]
+            )
+
+            all_members = self.db.get_family_members(user_id)
+            name_display = f" [{name}]" if name else ""
+
+            msg = (
+                "✅ **បានកត់ត្រាទិន្នន័យសមាជិកគ្រួសារដោយជោគជ័យ!**\n"
+                "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                f"👤 **តួនាទី:** {rel_label}{name_display}\n"
+                f"📅 **កំណើត:** `{birth_date}` ម៉ោង `{birth_time}` ({'ប្រុស' if gender == 'male' else 'ស្រី'})\n"
+                f"🔮 **ធាតុ Day Master:** **{profile['day_master']}** (ឆ្នាំ {profile['zodiac_kh']})\n"
+                f"🧭 **Life Gua:** **Gua {profile['life_gua']}** ({profile['trigram']})\n"
+                f"👨‍👩‍👧‍👦 **សមាជិករួមក្នុងប្រព័ន្ធបច្ចុប្បន្ន:** `{len(all_members)}` នាក់\n\n"
+                "👉 *ប្រព័ន្ធបានបញ្ចូលទិន្នន័យនេះទៅក្នុងការចងចាំរួមសម្រាប់ថ្លឹងថ្លែងរាល់ពេលឆ្លើយសំណួររបស់លោកអ្នក!*"
+            )
+            keyboard = [
+                [InlineKeyboardButton("📜 មើលរបាយការណ៍រាសីគ្រួសាររួម (Unified Synergy)", callback_data="fam_list")],
+                [
+                    InlineKeyboardButton("➕ បន្ថែមសមាជិកផ្សេងទៀត", callback_data="fam_add_prompt"),
+                    InlineKeyboardButton("🏠 ម៉ឺនុយដើម", callback_data="menu_main")
+                ]
+            ]
+            await self._safe_reply(update.message, msg, reply_markup=InlineKeyboardMarkup(keyboard))
+            asyncio.create_task(self._notify_admin_qa_interaction(
+                context, from_user, f"/data {' '.join(args)}", msg, service_type="👨‍👩‍👧‍👦 កត់ត្រាទិន្នន័យគ្រួសារ"
+            ))
+
+        except Exception as e:
+            logger.error(f"Error in data_command: {e}", exc_info=True)
+            await self._safe_reply(update.message, f"❌ កំហុសក្នុងការកត់ត្រាទិន្នន័យ៖ {str(e)}\n\n👉 គំរូត្រឹមត្រូវ: `/data ប្រពន្ធ 1992-08-20 14:00 female`")
+
     async def handle_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle conversational natural language messages with VIP limit & security enforcement."""
         from_user = update.effective_user
@@ -1498,7 +1669,19 @@ class FengShuiTelegramBot:
 
         await update.message.chat.send_action("typing")
 
-        consult_res = self.master.consult(query=clean_text)
+        # 4. Retrieve family members if registered to inject rich household context
+        family_members = self.db.get_family_members(from_user.id)
+        family_context_str = ""
+        if family_members:
+            fam_analysis = self.family.analyze_family_synergy(family_members)
+            if fam_analysis.get("success"):
+                main_u = fam_analysis["main_user"]
+                family_context_str = (
+                    f" [ព័ត៌មានគ្រួសារ: មេគ្រួសារធាតុ {main_u.get('day_master', 'Water')} ឆ្នាំ {main_u.get('zodiac_animal', 'Rat')}, "
+                    f"សមាជិករួម {len(family_members)} នាក់, ធាតុឱសថគ្រួសារ: {fam_analysis['household_remedy']['element']}]"
+                )
+
+        consult_res = self.master.consult(query=clean_text + family_context_str)
         response_text = consult_res.get("synthesis", "សូមអភ័យទោស ខ្ញុំមិនអាចឆ្លើយតបនៅពេលនេះបានទេ។")
 
         # Footer info
@@ -1932,8 +2115,8 @@ class FengShuiTelegramBot:
 
         try:
             # Check VIP permissions for gated callback features
-            gated_prefixes = ("curr_", "render_", "calc_", "cel_", "tz_", "love_tr_")
-            gated_exact = {"menu_curriculum", "menu_gua", "menu_flyingstars", "menu_bazi", "menu_predict", "menu_render3d", "menu_ask", "menu_love", "menu_celestial"}
+            gated_prefixes = ("curr_", "render_", "calc_", "cel_", "tz_", "love_tr_", "fam_")
+            gated_exact = {"menu_curriculum", "menu_gua", "menu_flyingstars", "menu_bazi", "menu_predict", "menu_render3d", "menu_ask", "menu_love", "menu_celestial", "menu_family", "fam_list"}
             if (data in gated_exact or any(data.startswith(p) for p in gated_prefixes)) and not self._is_vip_or_admin(from_user.id):
                 await self._send_vip_required_notice(query, from_user.id)
                 return
@@ -2128,6 +2311,88 @@ class FengShuiTelegramBot:
                     ]
                 ]
                 await self._safe_edit(query, treatise_text, reply_markup=InlineKeyboardMarkup(keyboard))
+
+            # Pillar 10: Family Synergy & Multi-Member Callbacks
+            elif data in ["menu_family", "fam_list"]:
+                members = self.db.get_family_members(from_user.id)
+                if not members:
+                    guide_text = (
+                        "👨‍👩‍👧‍👦 **ប្រព័ន្ធកត់ត្រាទិន្នន័យគ្រួសារ និងសមាជិករួមបន្ទុក ឥតដែនកំណត់ (PILLAR 10)** 👨‍👩‍👧‍👦\n"
+                        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                        "ដើម្បីឱ្យការទស្សទាយ និងការរៀបចំហុងស៊ុយគេហដ្ឋានមានភាពសុក្រិតឥតខ្ចោះ "
+                        "លោកអ្នកអាចបញ្ចូលទិន្នន័យ ម៉ោង ថ្ងៃខែឆ្នាំកំណើត របស់ខ្លួនឯង និងសមាជិកគ្រួសារទាំងអស់បានឥតដែនកំណត់៖\n\n"
+                        "🌟 **ទម្រង់ពាក្យបញ្ជា (Format):**\n"
+                        "`/data <តួនាទី> <YYYY-MM-DD> [HH:MM] [male/female] [ឈ្មោះ]`\n\n"
+                        "💡 **ឧទាហរណ៍ជាក់ស្តែង៖**\n"
+                        "• ខ្លួនឯង: `/data ខ្ញុំ 1990-05-15 08:30 male`\n"
+                        "• ភរិយា: `/data ប្រពន្ធ 1992-08-20 14:00 female ចិន្តា`\n"
+                        "• ស្វាមី: `/data ប្តី 1988-11-12 06:00 male សុខា`\n"
+                        "• កូនស្រី: `/data កូនស្រី 2018-03-10 09:15 female រចនា`\n"
+                        "• កូនប្រុស: `/data កូនប្រុស 2021-07-25 11:30 male វិបុល`\n"
+                        "• ឪពុក: `/data ឪពុក 1960-01-05 06:00 male`\n"
+                        "• ម្តាយ: `/data ម្តាយ 1965-09-18 16:20 female`\n\n"
+                        "🔒 *ទិន្នន័យទាំងអស់ត្រូវបានរក្សាទុកដោយឡែក ១០០% តាម Telegram User ID របស់អ្នក!*"
+                    )
+                    keyboard = [
+                        [InlineKeyboardButton("➕ របៀបបញ្ចូលសមាជិក", callback_data="fam_add_prompt")],
+                        [InlineKeyboardButton("🏠 ម៉ឺនុយដើម", callback_data="menu_main")]
+                    ]
+                    await self._safe_edit(query, guide_text, reply_markup=InlineKeyboardMarkup(keyboard))
+                else:
+                    report = self.family.generate_family_synergy_report(members)
+                    keyboard = [
+                        [
+                            InlineKeyboardButton("➕ បន្ថែមសមាជិក", callback_data="fam_add_prompt"),
+                            InlineKeyboardButton("🗑️ សម្អាតបញ្ជី", callback_data="fam_clear_confirm")
+                        ],
+                        [
+                            InlineKeyboardButton("💬 សួរគ្រូហុងស៊ុយអំពីគ្រួសារ", callback_data="menu_ask"),
+                            InlineKeyboardButton("🏠 ម៉ឺនុយដើម", callback_data="menu_main")
+                        ]
+                    ]
+                    await self._safe_edit(query, report, reply_markup=InlineKeyboardMarkup(keyboard))
+
+            elif data == "fam_add_prompt":
+                prompt_text = (
+                    "➕ **របៀបបញ្ចូលទិន្នន័យសមាជិកគ្រួសារថ្មី (Add Family Member)**\n"
+                    "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                    "សូមវាយពាក្យបញ្ជាតាមទម្រង់ខាងក្រោម៖\n\n"
+                    "👉 `/data <តួនាទី> <YYYY-MM-DD> [HH:MM] [male/female] [ឈ្មោះ]`\n\n"
+                    "**ឧទាហរណ៍ជាក់ស្តែង៖**\n"
+                    "• `/data ខ្ញុំ 1990-05-15 08:30 male`\n"
+                    "• `/data ប្រពន្ធ 1992-08-20 14:00 female ចិន្តា`\n"
+                    "• `/data កូនស្រី 2018-03-10 09:15 female រចនា`\n"
+                    "• `/data ឪពុក 1960-01-05 06:00 male`\n\n"
+                    "*(ប្រព័ន្ធនឹងគណនា BaZi, Day Master, ធាតុឱសថ និង Life Gua ដោយស្វ័យប្រវត្តិ!)*"
+                )
+                keyboard = [
+                    [InlineKeyboardButton("📜 មើលបញ្ជីគ្រួសាររួម", callback_data="fam_list")],
+                    [InlineKeyboardButton("🏠 ម៉ឺនុយដើម", callback_data="menu_main")]
+                ]
+                await self._safe_edit(query, prompt_text, reply_markup=InlineKeyboardMarkup(keyboard))
+
+            elif data == "fam_clear_confirm":
+                confirm_text = (
+                    "⚠️ **តើលោកអ្នកពិតជាចង់សម្អាតទិន្នន័យសមាជិកគ្រួសារទាំងអស់មែនទេ?**\n"
+                    "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                    "រាល់ទិន្នន័យសមាជិកដែលបានកត់ត្រានឹងត្រូវលុបចេញពីប្រព័ន្ធ។"
+                )
+                keyboard = [
+                    [
+                        InlineKeyboardButton("🗑️ បាទ/ចាស លុបទាំងអស់", callback_data="fam_clear_exec"),
+                        InlineKeyboardButton("❌ បោះបង់", callback_data="fam_list")
+                    ]
+                ]
+                await self._safe_edit(query, confirm_text, reply_markup=InlineKeyboardMarkup(keyboard))
+
+            elif data == "fam_clear_exec":
+                self.db.clear_family_members(from_user.id)
+                msg = "✅ **បានសម្អាតទិន្នន័យសមាជិកគ្រួសារទាំងអស់ដោយជោគជ័យ!**"
+                keyboard = [
+                    [InlineKeyboardButton("➕ បញ្ចូលទិន្នន័យជាថ្មី", callback_data="fam_add_prompt")],
+                    [InlineKeyboardButton("🏠 ម៉ឺនុយដើម", callback_data="menu_main")]
+                ]
+                await self._safe_edit(query, msg, reply_markup=InlineKeyboardMarkup(keyboard))
 
             # VIP Menu
             elif data == "menu_vip":
@@ -2688,6 +2953,7 @@ class FengShuiTelegramBot:
             app.add_handler(CommandHandler("celestial", self.celestial_command))
             app.add_handler(CommandHandler("love", self.love_command))
             app.add_handler(CommandHandler("mahasneh", self.love_command))
+            app.add_handler(CommandHandler(["data", "family"], self.data_command))
             app.add_handler(CommandHandler("ask", self.handle_message))
 
             # Callbacks & Messages

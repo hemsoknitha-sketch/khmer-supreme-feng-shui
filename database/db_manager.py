@@ -110,10 +110,32 @@ class DatabaseManager:
                     except Exception:
                         pass
 
+                # 5. Family Profiles Table (Pillar 10: Multi-Member Household BaZi & Synergy)
+                cursor.execute("""
+                CREATE TABLE IF NOT EXISTS family_profiles (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    telegram_id INTEGER NOT NULL,
+                    relation_type TEXT NOT NULL,
+                    relation_label TEXT NOT NULL,
+                    name TEXT,
+                    birth_date TEXT NOT NULL,
+                    birth_time TEXT DEFAULT '12:00',
+                    gender TEXT NOT NULL,
+                    day_master TEXT,
+                    useful_god TEXT,
+                    zodiac_animal TEXT,
+                    life_gua INTEGER,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    UNIQUE(telegram_id, relation_type, name)
+                );
+                """)
+
                 # Indexes
                 cursor.execute("CREATE INDEX IF NOT EXISTS idx_users_role ON users(role);")
                 cursor.execute("CREATE INDEX IF NOT EXISTS idx_users_vip_expiry ON users(vip_expiry);")
                 cursor.execute("CREATE INDEX IF NOT EXISTS idx_licenses_redeemed ON licenses(is_redeemed);")
+                cursor.execute("CREATE INDEX IF NOT EXISTS idx_family_telegram_id ON family_profiles(telegram_id);")
 
                 conn.commit()
                 logger.info(f"Database initialized successfully at {DB_PATH}")
@@ -569,6 +591,129 @@ class DatabaseManager:
                    OR (vip_expiry IS NOT NULL AND vip_expiry > ?));
             """, (now,))
             return [dict(row) for row in cursor.fetchall()]
+
+    # =========================================================================
+    # Pillar 10: Multi-Member Family & Dependent Profile CRUD Operations
+    # =========================================================================
+    def upsert_family_member(
+        self,
+        telegram_id: int,
+        relation_type: str,
+        relation_label: str,
+        birth_date: str,
+        birth_time: str = "12:00",
+        gender: str = "male",
+        name: Optional[str] = None,
+        day_master: Optional[str] = None,
+        useful_god: Optional[str] = None,
+        zodiac_animal: Optional[str] = None,
+        life_gua: Optional[int] = None
+    ) -> Dict[str, Any]:
+        """Insert or update a dependent family member profile for a user."""
+        now = datetime.utcnow().isoformat()
+        name_val = name.strip() if name else ""
+
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                INSERT INTO family_profiles (
+                    telegram_id, relation_type, relation_label, name,
+                    birth_date, birth_time, gender, day_master,
+                    useful_god, zodiac_animal, life_gua, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(telegram_id, relation_type, name) DO UPDATE SET
+                    relation_label = excluded.relation_label,
+                    birth_date = excluded.birth_date,
+                    birth_time = excluded.birth_time,
+                    gender = excluded.gender,
+                    day_master = excluded.day_master,
+                    useful_god = excluded.useful_god,
+                    zodiac_animal = excluded.zodiac_animal,
+                    life_gua = excluded.life_gua,
+                    updated_at = excluded.updated_at;
+            """, (
+                telegram_id, relation_type.strip().lower(), relation_label.strip(),
+                name_val, birth_date.strip(), birth_time.strip(),
+                gender.strip().lower(), day_master, useful_god,
+                zodiac_animal, life_gua, now, now
+            ))
+            conn.commit()
+
+            # If this is "self", also synchronize with the main user record
+            if relation_type in ("self", "ខ្ញុំ"):
+                self.set_user_birth_profile(telegram_id, birth_date, birth_time, gender)
+
+            return {
+                "success": True,
+                "telegram_id": telegram_id,
+                "relation_type": relation_type,
+                "relation_label": relation_label,
+                "name": name_val,
+                "birth_date": birth_date,
+                "birth_time": birth_time,
+                "gender": gender,
+                "day_master": day_master,
+                "zodiac_animal": zodiac_animal,
+                "life_gua": life_gua
+            }
+
+    def get_family_members(self, telegram_id: int) -> List[Dict[str, Any]]:
+        """Retrieve all registered family members for a specific user ID."""
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT id, telegram_id, relation_type, relation_label, name,
+                       birth_date, birth_time, gender, day_master, useful_god,
+                       zodiac_animal, life_gua, created_at, updated_at
+                FROM family_profiles
+                WHERE telegram_id = ?
+                ORDER BY
+                    CASE
+                        WHEN relation_type = 'self' THEN 1
+                        WHEN relation_type = 'spouse' THEN 2
+                        WHEN relation_type = 'daughter' THEN 3
+                        WHEN relation_type = 'son' THEN 4
+                        WHEN relation_type = 'father' THEN 5
+                        WHEN relation_type = 'mother' THEN 6
+                        ELSE 7
+                    END, id ASC;
+            """, (telegram_id,))
+            return [dict(row) for row in cursor.fetchall()]
+
+    def delete_family_member(self, telegram_id: int, relation_type: Optional[str] = None, name: Optional[str] = None) -> bool:
+        """Delete specific family member(s) for a user."""
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            if relation_type and name:
+                cursor.execute("""
+                    DELETE FROM family_profiles
+                    WHERE telegram_id = ? AND relation_type = ? AND name = ?;
+                """, (telegram_id, relation_type.strip().lower(), name.strip()))
+            elif relation_type:
+                cursor.execute("""
+                    DELETE FROM family_profiles
+                    WHERE telegram_id = ? AND relation_type = ?;
+                """, (telegram_id, relation_type.strip().lower()))
+            elif name:
+                cursor.execute("""
+                    DELETE FROM family_profiles
+                    WHERE telegram_id = ? AND name = ?;
+                """, (telegram_id, name.strip()))
+            else:
+                return False
+            conn.commit()
+            return cursor.rowcount > 0
+
+    def clear_family_members(self, telegram_id: int) -> bool:
+        """Clear all family members for a user except 'self' if desired."""
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                DELETE FROM family_profiles
+                WHERE telegram_id = ?;
+            """, (telegram_id,))
+            conn.commit()
+            return cursor.rowcount > 0
 
 
 # Global Singleton Instance

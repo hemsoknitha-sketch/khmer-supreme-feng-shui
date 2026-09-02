@@ -521,3 +521,79 @@ def get_daily_almanac():
     almanac = engine.calculate_global_almanac()
     return {"success": True, "almanac": almanac}
 
+
+# =============================================================================
+# Pillar 10: Family Synergy & Lineage BaZi REST API
+# =============================================================================
+class FamilyMemberRequest(BaseModel):
+    telegram_id: int = Field(..., description="Telegram User ID")
+    relation: str = Field(..., description="Relation: ខ្ញុំ, ប្តី, ប្រពន្ធ, កូនស្រី, កូនប្រុស, ឪពុក, ម្តាយ, etc.")
+    birth_date: str = Field(..., description="YYYY-MM-DD")
+    birth_time: Optional[str] = Field("12:00", description="HH:MM")
+    gender: Optional[str] = Field("male", description="male / female")
+    name: Optional[str] = Field(None, description="Optional member name")
+
+
+@app.post("/api/family/member")
+def add_or_update_family_member(req: FamilyMemberRequest):
+    """Add or update a family member with deterministic BaZi & Gua calculations."""
+    from engines.family_synergy_engine import family_synergy_engine
+    from database.db_manager import db_manager
+
+    rel_type, rel_label, default_gender = family_synergy_engine.parse_relation(req.relation)
+    gender_val = req.gender if req.gender else default_gender
+
+    profile = family_synergy_engine.calculate_member_profile(
+        birth_date=req.birth_date,
+        birth_time=req.birth_time or "12:00",
+        gender=gender_val
+    )
+
+    res = db_manager.upsert_family_member(
+        telegram_id=req.telegram_id,
+        relation_type=rel_type,
+        relation_label=rel_label,
+        birth_date=req.birth_date,
+        birth_time=req.birth_time or "12:00",
+        gender=gender_val,
+        name=req.name,
+        day_master=profile["day_master"],
+        useful_god=profile["useful_god"],
+        zodiac_animal=profile["zodiac_animal"],
+        life_gua=profile["life_gua"]
+    )
+    return {"success": True, "data": res, "calculated_profile": profile}
+
+
+@app.get("/api/family/{telegram_id}")
+def get_family_profile(telegram_id: int):
+    """Retrieve all family members and unified synergy analysis for a user."""
+    from engines.family_synergy_engine import family_synergy_engine
+    from database.db_manager import db_manager
+
+    members = db_manager.get_family_members(telegram_id)
+    analysis = family_synergy_engine.analyze_family_synergy(members) if members else None
+    return {
+        "success": True,
+        "telegram_id": telegram_id,
+        "count": len(members),
+        "members": members,
+        "synergy_analysis": analysis
+    }
+
+
+@app.post("/api/family/report")
+def get_family_synergy_report(req: Dict[str, Any]):
+    """Generate complete formatted Family Synergy Report without noise symbols."""
+    from engines.family_synergy_engine import family_synergy_engine
+    from database.db_manager import db_manager
+
+    telegram_id = req.get("telegram_id")
+    if not telegram_id:
+        raise HTTPException(status_code=400, detail="telegram_id is required")
+
+    members = db_manager.get_family_members(int(telegram_id))
+    report = family_synergy_engine.generate_family_synergy_report(members)
+    return {"success": True, "report": report}
+
+

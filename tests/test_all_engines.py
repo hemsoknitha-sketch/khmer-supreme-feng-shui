@@ -193,6 +193,58 @@ class TestSupremeFengShuiSystem(unittest.TestCase):
         self.assertIn("deep_explanation", res)
         self.assertGreater(len(res["deep_explanation"]), 50)
 
+    # 14. Test Family Synergy & Data Segregation (Pillar 10)
+    def test_14_family_synergy_and_data_segregation(self):
+        """Verify multi-member family registration, data isolation, and synergy calculations."""
+        from engines.family_synergy_engine import family_synergy_engine
+        from database.db_manager import db_manager
+
+        user_a = 999111
+        user_b = 999222
+        db_manager.clear_family_members(user_a)
+        db_manager.clear_family_members(user_b)
+
+        # Add family members for User A
+        p1 = family_synergy_engine.calculate_member_profile("1988-06-12", "06:30", "male")
+        db_manager.upsert_family_member(
+            user_a, "self", "ខ្ញុំ (ម្ចាស់ផ្ទះ)", "1988-06-12", "06:30", "male",
+            day_master=p1["day_master"], useful_god=p1["useful_god"],
+            zodiac_animal=p1["zodiac_animal"], life_gua=p1["life_gua"]
+        )
+
+        p2 = family_synergy_engine.calculate_member_profile("1990-09-24", "15:00", "female")
+        db_manager.upsert_family_member(
+            user_a, "spouse", "ភរិយា", "1990-09-24", "15:00", "female",
+            day_master=p2["day_master"], useful_god=p2["useful_god"],
+            zodiac_animal=p2["zodiac_animal"], life_gua=p2["life_gua"]
+        )
+
+        # Add family member for User B
+        p_b = family_synergy_engine.calculate_member_profile("1995-01-01", "12:00", "male")
+        db_manager.upsert_family_member(
+            user_b, "self", "ខ្ញុំ", "1995-01-01", "12:00", "male",
+            day_master=p_b["day_master"], useful_god=p_b["useful_god"],
+            zodiac_animal=p_b["zodiac_animal"], life_gua=p_b["life_gua"]
+        )
+
+        # Verify Data Segregation (User A has 2 members, User B has 1 member)
+        members_a = db_manager.get_family_members(user_a)
+        members_b = db_manager.get_family_members(user_b)
+        self.assertEqual(len(members_a), 2, "User A must have 2 family members.")
+        self.assertEqual(len(members_b), 1, "User B must have 1 family member.")
+
+        # Verify Synergy Analysis
+        analysis_a = family_synergy_engine.analyze_family_synergy(members_a)
+        self.assertTrue(analysis_a["success"])
+        self.assertEqual(analysis_a["total_members"], 2)
+        self.assertIn("household_remedy", analysis_a)
+
+        # Verify Report Generation
+        report_a = family_synergy_engine.generate_family_synergy_report(members_a)
+        self.assertIn("របាយការណ៍ហុងស៊ុយរាសីគ្រួសាររួម", report_a)
+        self.assertNotIn("**", report_a)
+        self.assertNotIn("==", report_a)
+
 
 if __name__ == "__main__":
     unittest.main()
