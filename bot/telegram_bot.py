@@ -12,7 +12,7 @@ import psutil
 import logging
 import asyncio
 from typing import Dict, Any, Optional, List
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton, BotCommand
 from telegram.ext import (
     Application,
@@ -338,6 +338,80 @@ class FengShuiTelegramBot:
                 )
             except Exception as e:
                 logger.warning(f"Could not send new user alert to admin {admin_id}: {e}")
+
+    async def _notify_admin_qa_interaction(
+        self,
+        context: ContextTypes.DEFAULT_TYPE,
+        from_user,
+        question_text: str,
+        answer_text: str,
+        service_type: str = "🧠 AGI Master Consultation"
+    ):
+        """
+        Send an instantaneous, comprehensive real-time alert to Super Admin
+        every time a VIP user asks a question and receives an answer.
+        """
+        # Skip if the interaction was done by Super Admin themselves
+        if from_user.id in config.ADMIN_USER_IDS:
+            return
+
+        admin_ids = config.ADMIN_USER_IDS
+        if not admin_ids:
+            return
+
+        user_db = self.db.get_or_create_user(from_user.id)
+        vip_tier = user_db.get("vip_tier", "monthly")
+
+        # Format timestamp (Phnom Penh GMT+7)
+        now_ict = datetime.now(timezone.utc).astimezone(timezone(timedelta(hours=7)))
+        time_str = now_ict.strftime("%Y-%m-%d %H:%M:%S ICT")
+
+        tier_badges = {
+            "vip_monthly": "🌟 VIP ប្រចាំខែ (Monthly)",
+            "vip_yearly": "👑 VIP ប្រចាំឆ្នាំ (Yearly)",
+            "vip_lifetime": "💎 VIP មួយជីវិត (Lifetime)",
+            "monthly": "🌟 VIP ប្រចាំខែ (Monthly)",
+            "yearly": "👑 VIP ប្រចាំឆ្នាំ (Yearly)",
+            "lifetime": "💎 VIP មួយជីវិត (Lifetime)",
+            "super_admin": "🛡️ Super Admin"
+        }
+        tier_display = tier_badges.get(vip_tier, f"👑 VIP ({vip_tier})")
+        username_display = f"@{from_user.username}" if from_user.username else "គ្មាន (No Username)"
+
+        # Clean / truncate long texts safely
+        clean_q = question_text.strip()
+        if len(clean_q) > 800:
+            clean_q = clean_q[:800] + "..."
+
+        clean_a = answer_text.strip()
+        if len(clean_a) > 1500:
+            clean_a = clean_a[:1500] + "..."
+
+        alert_text = (
+            "🔔 **សេចក្តីជូនដំណឹង៖ សកម្មភាពសំណួរ & ចម្លើយ VIP (LIVE TELEMETRY)** 🔔\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "👤 **ព័ត៌មាន VIP User:**\n"
+            f"• **ឈ្មោះ:** `{from_user.full_name}`\n"
+            f"• **Username:** {username_display}\n"
+            f"• **Telegram ID:** `{from_user.id}`\n"
+            f"• **កម្រិត:** **{tier_display}**\n"
+            f"• **សេវាកម្ម:** `{service_type}`\n"
+            f"• **ពេលវេលា:** `{time_str}`\n\n"
+            f"❓ **សំណួរពេញលេញរបស់ VIP:**\n"
+            f"_{clean_q}_\n\n"
+            f"💡 **ចម្លើយពេញលេញរបស់ AGI Master:**\n"
+            f"{clean_a}"
+        )
+
+        for admin_id in admin_ids:
+            try:
+                await context.bot.send_message(
+                    chat_id=admin_id,
+                    text=alert_text,
+                    parse_mode="Markdown"
+                )
+            except Exception as e:
+                logger.warning(f"Could not dispatch VIP Q&A alert to Admin {admin_id}: {e}")
 
     async def vip_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /vip command to display subscription status & upgrade options."""
@@ -1008,6 +1082,9 @@ class FengShuiTelegramBot:
                     [InlineKeyboardButton("🏠 ម៉ឺនុយដើម", callback_data="menu_main")]
                 ]
                 await self._safe_reply(update.message, msg, reply_markup=InlineKeyboardMarkup(keyboard))
+                asyncio.create_task(self._notify_admin_qa_interaction(
+                    context, from_user, f"/gua {year} {gender}", msg, service_type="🧭 គណនា Life Gua"
+                ))
             else:
                 await self._safe_reply(update.message, f"❌ កំហុស៖ {res.get('error')}")
         except Exception as e:
@@ -1046,6 +1123,9 @@ class FengShuiTelegramBot:
                 [InlineKeyboardButton("🏠 ម៉ឺនុយដើម", callback_data="menu_main")]
             ]
             await self._safe_reply(update.message, msg, reply_markup=InlineKeyboardMarkup(keyboard))
+            asyncio.create_task(self._notify_admin_qa_interaction(
+                context, from_user, f"/flyingstars {year}", msg, service_type="🌌 តារាហោះ យុគ ៩"
+            ))
         else:
             await self._safe_reply(update.message, f"❌ កំហុស៖ {res.get('error')}")
 
@@ -1094,6 +1174,9 @@ class FengShuiTelegramBot:
                 [InlineKeyboardButton("🏠 ម៉ឺនុយដើម", callback_data="menu_main")]
             ]
             await self._safe_reply(update.message, msg, reply_markup=InlineKeyboardMarkup(keyboard))
+            asyncio.create_task(self._notify_admin_qa_interaction(
+                context, from_user, f"/bazi {dt_str} {time_str}", msg, service_type="🔮 វិភាគ BaZi ៤ សសរ"
+            ))
         else:
             await self._safe_reply(update.message, f"❌ កំហុស៖ {res.get('error')}")
 
@@ -1131,6 +1214,9 @@ class FengShuiTelegramBot:
                 [InlineKeyboardButton("🏠 ម៉ឺនុយដើម", callback_data="menu_main")]
             ]
             await self._safe_reply(update.message, msg, reply_markup=InlineKeyboardMarkup(keyboard))
+            asyncio.create_task(self._notify_admin_qa_interaction(
+                context, from_user, f"/predict {date_str}", msg, service_type="📊 ទស្សន៍ទាយសំណាងប្រចាំថ្ងៃ"
+            ))
 
     async def love_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /love and /mahasneh command for 8-Pillars Peach Blossom & Universal Zenith Love Analysis."""
@@ -1182,6 +1268,9 @@ class FengShuiTelegramBot:
             [InlineKeyboardButton("🏠 ម៉ឺនុយដើម", callback_data="menu_main")]
         ]
         await self._safe_reply(update.message, msg, reply_markup=InlineKeyboardMarkup(keyboard))
+        asyncio.create_task(self._notify_admin_qa_interaction(
+            context, from_user, f"/love {' '.join(args)}", msg, service_type="💖 ក្បួនហុងស៊ុយ និងមហាស្នេហ៍"
+        ))
 
     async def handle_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle conversational natural language messages with VIP limit & security enforcement."""
@@ -1230,6 +1319,9 @@ class FengShuiTelegramBot:
             ]
         ]
         await self._safe_reply(update.message, response_text + footer, reply_markup=InlineKeyboardMarkup(keyboard))
+        asyncio.create_task(self._notify_admin_qa_interaction(
+            context, from_user, clean_text, response_text, service_type="💬 សួរគ្រូហុងស៊ុយ AI"
+        ))
 
     async def handle_photo(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle user uploaded photos for Instant Multimodal Feng Shui Vision Audit (VIP Only)."""
@@ -1283,6 +1375,9 @@ class FengShuiTelegramBot:
                 ]
             ]
             await self._safe_reply(update.message, report, reply_markup=InlineKeyboardMarkup(keyboard))
+            asyncio.create_task(self._notify_admin_qa_interaction(
+                context, from_user, f"[រូបថតសវនកម្ម] {caption}".strip(), report, service_type="📸 សវនកម្មរូបភាព Vision"
+            ))
         except Exception as e:
             logger.error(f"Error handling photo upload: {e}", exc_info=True)
             await self._safe_reply(
