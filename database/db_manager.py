@@ -94,11 +94,16 @@ class DatabaseManager:
                 );
                 """)
 
-                # Migrations: Ensure birth_date, birth_time, gender columns exist
+                # Migrations: Ensure birth_date, birth_time, gender, timezone, utc_offset, alert tracking columns exist
                 for col_def in [
                     ("birth_date", "TEXT"),
                     ("birth_time", "TEXT DEFAULT '12:00'"),
-                    ("gender", "TEXT DEFAULT 'male'")
+                    ("gender", "TEXT DEFAULT 'male'"),
+                    ("timezone", "TEXT DEFAULT 'Asia/Phnom_Penh'"),
+                    ("utc_offset", "REAL DEFAULT 7.0"),
+                    ("last_daily_alert_date", "TEXT"),
+                    ("last_monthly_alert_month", "TEXT"),
+                    ("last_yearly_alert_year", "TEXT")
                 ]:
                     try:
                         cursor.execute(f"ALTER TABLE users ADD COLUMN {col_def[0]} {col_def[1]};")
@@ -517,13 +522,47 @@ class DatabaseManager:
             conn.commit()
             return cursor.rowcount > 0
 
-    def get_active_vip_users_with_birth_profiles(self) -> List[Dict[str, Any]]:
-        """Fetch all active VIP users and admins with their birth profiles."""
+    def set_user_timezone(self, telegram_id: int, timezone_name: str, utc_offset: float) -> bool:
+        """Save user's real-world timezone and UTC offset for localized 5:00 AM alerts."""
         now = datetime.utcnow().isoformat()
         with get_db_connection() as conn:
             cursor = conn.cursor()
             cursor.execute("""
-                SELECT telegram_id, username, full_name, role, vip_tier, vip_expiry, birth_date, birth_time, gender
+                UPDATE users
+                SET timezone = ?, utc_offset = ?, updated_at = ?
+                WHERE telegram_id = ?;
+            """, (timezone_name.strip(), float(utc_offset), now, telegram_id))
+            conn.commit()
+            return cursor.rowcount > 0
+
+    def update_user_alert_dispatch(self, telegram_id: int, alert_type: str, date_key: str):
+        """Update last dispatched alert date/month/year to prevent duplicate delivery."""
+        col_map = {
+            "daily": "last_daily_alert_date",
+            "monthly": "last_monthly_alert_month",
+            "yearly": "last_yearly_alert_year"
+        }
+        col = col_map.get(alert_type, "last_daily_alert_date")
+        now = datetime.utcnow().isoformat()
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(f"""
+                UPDATE users
+                SET {col} = ?, updated_at = ?
+                WHERE telegram_id = ?;
+            """, (date_key, now, telegram_id))
+            conn.commit()
+
+    def get_active_vip_users_with_birth_profiles(self) -> List[Dict[str, Any]]:
+        """Fetch all active VIP users and admins with their birth and timezone profiles."""
+        now = datetime.utcnow().isoformat()
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT telegram_id, username, full_name, role, vip_tier, vip_expiry, birth_date, birth_time, gender,
+                       COALESCE(timezone, 'Asia/Phnom_Penh') as timezone,
+                       COALESCE(utc_offset, 7.0) as utc_offset,
+                       last_daily_alert_date, last_monthly_alert_month, last_yearly_alert_year
                 FROM users
                 WHERE (role IN ('super_admin', 'vip_monthly', 'vip_yearly', 'vip_lifetime')
                    OR vip_tier IN ('admin', 'monthly', 'yearly', 'lifetime')

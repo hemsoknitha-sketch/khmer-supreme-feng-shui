@@ -117,6 +117,117 @@ class CelestialAstrologyEngine:
         self.chronos = ChronosCycleEngine()
 
     # =========================================================================
+    # Super Smart Global Timezone Resolver (World-Wide 5:00 AM Alert Precision)
+    # =========================================================================
+    TIMEZONE_DATABASE = {
+        # Asia & Pacific
+        "cambodia": ("Asia/Phnom_Penh", 7.0),
+        "khmer": ("Asia/Phnom_Penh", 7.0),
+        "phnom penh": ("Asia/Phnom_Penh", 7.0),
+        "thailand": ("Asia/Bangkok", 7.0),
+        "bangkok": ("Asia/Bangkok", 7.0),
+        "vietnam": ("Asia/Ho_Chi_Minh", 7.0),
+        "singapore": ("Asia/Singapore", 8.0),
+        "malaysia": ("Asia/Kuala_Lumpur", 8.0),
+        "china": ("Asia/Shanghai", 8.0),
+        "beijing": ("Asia/Shanghai", 8.0),
+        "hong kong": ("Asia/Hong_Kong", 8.0),
+        "taiwan": ("Asia/Taipei", 8.0),
+        "japan": ("Asia/Tokyo", 9.0),
+        "tokyo": ("Asia/Tokyo", 9.0),
+        "korea": ("Asia/Seoul", 9.0),
+        "seoul": ("Asia/Seoul", 9.0),
+        "australia_sydney": ("Australia/Sydney", 10.0),
+        "sydney": ("Australia/Sydney", 10.0),
+        "melbourne": ("Australia/Melbourne", 10.0),
+        "new zealand": ("Pacific/Auckland", 12.0),
+        "india": ("Asia/Kolkata", 5.5),
+
+        # Europe & Middle East
+        "france": ("Europe/Paris", 1.0),
+        "paris": ("Europe/Paris", 1.0),
+        "germany": ("Europe/Berlin", 1.0),
+        "berlin": ("Europe/Berlin", 1.0),
+        "uk": ("Europe/London", 0.0),
+        "london": ("Europe/London", 0.0),
+        "italy": ("Europe/Rome", 1.0),
+        "switzerland": ("Europe/Zurich", 1.0),
+        "russia_moscow": ("Europe/Moscow", 3.0),
+        "dubai": ("Asia/Dubai", 4.0),
+
+        # Americas
+        "usa_east": ("America/New_York", -5.0),
+        "new york": ("America/New_York", -5.0),
+        "florida": ("America/New_York", -5.0),
+        "washington": ("America/New_York", -5.0),
+        "usa_central": ("America/Chicago", -6.0),
+        "chicago": ("America/Chicago", -6.0),
+        "texas": ("America/Chicago", -6.0),
+        "usa_mountain": ("America/Denver", -7.0),
+        "denver": ("America/Denver", -7.0),
+        "usa_west": ("America/Los_Angeles", -8.0),
+        "california": ("America/Los_Angeles", -8.0),
+        "los angeles": ("America/Los_Angeles", -8.0),
+        "canada_toronto": ("America/Toronto", -5.0),
+        "toronto": ("America/Toronto", -5.0),
+        "montreal": ("America/Montreal", -5.0),
+        "vancouver": ("America/Vancouver", -8.0),
+    }
+
+    def resolve_timezone_offset(self, tz_input: str) -> Tuple[str, float]:
+        """
+        Super Smart resolver: Converts city name, country, UTC expression, or IANA name into (name, offset_hours).
+        Examples: '+7', 'UTC+7', 'Paris', 'New York', 'Asia/Tokyo', '-5'
+        """
+        raw = tz_input.strip().lower()
+
+        # 1. Direct offset numbers (e.g. "+7", "-5", "7", "UTC+7", "GMT-5")
+        clean_num = raw.replace("utc", "").replace("gmt", "").strip()
+        try:
+            val = float(clean_num)
+            if -12.0 <= val <= 14.0:
+                name = f"UTC{'+' if val >= 0 else ''}{val:g}"
+                return (name, val)
+        except ValueError:
+            pass
+
+        # 2. Lookup Database
+        for key, (tz_name, offset) in self.TIMEZONE_DATABASE.items():
+            if key in raw:
+                return (tz_name, offset)
+
+        # 3. Default fallback to Phnom Penh (UTC+7)
+        return ("Asia/Phnom_Penh", 7.0)
+
+    def resolve_coordinates_to_timezone(self, latitude: float, longitude: float) -> Tuple[str, float]:
+        """
+        Resolve exact user GPS coordinates into their real-world Timezone and UTC offset.
+        Uses longitude angular offset with 15 degrees per hour and regional bounds.
+        """
+        # Mathematical timezone calculation (15 degrees per timezone)
+        raw_offset = round(longitude / 15.0)
+
+        # Regional refinements for high accuracy
+        if 9.0 <= latitude <= 24.0 and 97.0 <= longitude <= 110.0:
+            return ("Asia/Phnom_Penh", 7.0) # Cambodia, Thailand, Vietnam, Laos
+        elif 24.0 <= latitude <= 46.0 and 122.0 <= longitude <= 146.0:
+            return ("Asia/Tokyo", 9.0) # Japan, Korea
+        elif 42.0 <= latitude <= 52.0 and -5.0 <= longitude <= 9.0:
+            return ("Europe/Paris", 1.0) # France, Western Europe
+        elif 24.0 <= latitude <= 50.0 and -85.0 <= longitude <= -65.0:
+            return ("America/New_York", -5.0) # US East Coast
+        elif 30.0 <= latitude <= 50.0 and -125.0 <= longitude <= -114.0:
+            return ("America/Los_Angeles", -8.0) # US West Coast
+
+        tz_name = f"UTC{'+' if raw_offset >= 0 else ''}{raw_offset}"
+        return (tz_name, float(raw_offset))
+
+    def get_user_local_datetime(self, utc_offset: float = 7.0) -> datetime:
+        """Get current datetime in the user's localized timezone."""
+        now_utc = datetime.now(timezone.utc)
+        return now_utc + timedelta(hours=utc_offset)
+
+    # =========================================================================
     # 1. Precision BaZi Sync with Birth Hour (ម៉ោង ថ្ងៃ ខែ ឆ្នាំ)
     # =========================================================================
     def calculate_precision_bazi(

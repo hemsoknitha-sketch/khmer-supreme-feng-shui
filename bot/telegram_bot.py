@@ -214,6 +214,7 @@ class FengShuiTelegramBot:
             BotCommand("yearly", "🎊 មហាសង្ក្រាន្ត & រាសីប្រចាំឆ្នាំ (Yearly)"),
             BotCommand("almanac", "📜 ក្បួនតម្រាខ្មែរ & Tung Shu ប្រចាំថ្ងៃ"),
             BotCommand("setbirth", "⚙️ កំណត់ម៉ោង & ថ្ងៃខែឆ្នាំកំណើត"),
+            BotCommand("settimezone", "🌐 កំណត់តំបន់ម៉ោង (ឧ. /tz Paris)"),
             BotCommand("love", "💖 ហុងស៊ុយ & មហាស្នេហ៍ (Peach Blossom)"),
             BotCommand("render3d", "🎨 បង្កើតប្លង់ 3D 4K & ពិនិត្យរូបភាព"),
             BotCommand("health", "⚡ ត្រួតពិនិត្យសុខភាព VPS, CPU, RAM, Disk, AI"),
@@ -877,139 +878,122 @@ class FengShuiTelegramBot:
             except Exception as e:
                 logger.error(f"Could not send backup zip to Admin {admin_id}: {e}", exc_info=True)
 
-    # ==================== PILLAR 9 CELESTIAL SCHEDULER & ALERTS ====================
+    # ==================== PILLAR 9 CELESTIAL SCHEDULER & LOCALIZED TIMEZONE ALERTS ====================
 
     async def _start_celestial_alert_scheduler(self, application: Application):
         """
-        Background Task: Automated Daily 5:00 AM ICT Celestial Astrology & Almanac Dispatcher.
-        Dispatches personalized daily horoscope at 5:00 AM ICT every day, monthly blueprint
-        on the 1st of every month, and yearly blueprint on New Year / Li Chun.
+        Background Task: Automated Per-User 5:00 AM Local Timezone Celestial Astrology & Almanac Dispatcher.
+        Runs a minute-level tick to check and dispatch personalized alerts to users worldwide
+        at exactly 5:00 AM in their respective real-world local timezones.
         """
-        logger.info("Celestial 5:00 AM ICT daily/monthly alert background scheduler started successfully.")
+        logger.info("Super Smart Global Timezone 5:00 AM Alert Scheduler initialized and running.")
         while True:
             try:
-                # Calculate seconds until next 5:00 AM Phnom Penh Time (ICT / UTC+7)
-                now_utc = datetime.now(timezone.utc)
-                now_ict = now_utc.astimezone(timezone(timedelta(hours=7)))
-
-                # Target time: Today at 05:00:00 ICT
-                target_ict = now_ict.replace(hour=5, minute=0, second=0, microsecond=0)
-                if now_ict >= target_ict:
-                    # If already past 5:00 AM today, schedule for tomorrow 5:00 AM
-                    target_ict += timedelta(days=1)
-
-                wait_seconds = (target_ict - now_ict).total_seconds()
-                logger.info(f"Celestial Scheduler sleeping for {wait_seconds / 3600:.2f} hours until next 5:00 AM ICT ({target_ict.strftime('%Y-%m-%d %H:%M:%S')})...")
-                await asyncio.sleep(wait_seconds)
-
-                # Trigger Celestial Alert Dispatch
-                await self._dispatch_celestial_alerts(application)
-
-                # Sleep 60 seconds to avoid duplicate firing in the same minute
+                await self._dispatch_celestial_alerts_tick(application)
+                # Sleep 60 seconds until next minute tick
                 await asyncio.sleep(60)
             except asyncio.CancelledError:
                 break
             except Exception as e:
-                logger.error(f"Error in Celestial alert scheduler: {e}", exc_info=True)
-                await asyncio.sleep(300)
+                logger.error(f"Error in Celestial alert scheduler tick: {e}", exc_info=True)
+                await asyncio.sleep(60)
 
-    async def _dispatch_celestial_alerts(self, application: Application):
-        """Dispatch daily 5:00 AM horoscope, monthly blueprint on 1st of month, and new year horoscope."""
-        logger.info("Executing automated Celestial alert dispatch for VIP users and Admins at 5:00 AM ICT...")
+    async def _dispatch_celestial_alerts_tick(self, application: Application):
+        """
+        Inspect all active VIP users and dispatch alert if current time in user's local timezone is 5:00 AM.
+        Prevents duplicate sends via date key tracking in database.
+        """
         users = self.db.get_active_vip_users_with_birth_profiles()
-        now_ict = datetime.now(timezone.utc).astimezone(timezone(timedelta(hours=7)))
+        if not users:
+            return
 
-        is_first_of_month = (now_ict.day == 1)
-        is_new_year = (now_ict.month == 1 and now_ict.day == 1) or (now_ict.month == 2 and now_ict.day == 4)
+        now_utc = datetime.now(timezone.utc)
 
-        sent_count = 0
         for u in users:
             tid = u["telegram_id"]
-            b_date = u.get("birth_date") or "1990-05-15"
-            b_time = u.get("birth_time") or "12:00"
-            gender = u.get("gender") or "male"
+            utc_offset = float(u.get("utc_offset") if u.get("utc_offset") is not None else 7.0)
+            user_local_dt = now_utc + timedelta(hours=utc_offset)
 
-            # 1. Daily Celestial Report
-            daily_msg = self.celestial.generate_daily_celestial_report(
-                birth_date=b_date,
-                birth_time=b_time,
-                gender=gender,
-                target_date=now_ict.date()
-            )
-            keyboard = [
-                [InlineKeyboardButton("📜 មើលក្បួនតម្រា Tung Shu & ខ្មែរ", callback_data="cel_almanac")],
-                [
-                    InlineKeyboardButton("⚙️ កែសម្រួលម៉ោងកំណើត", callback_data="cel_setbirth_prompt"),
-                    InlineKeyboardButton("🏠 ម៉ឺនុយដើម", callback_data="menu_main")
-                ]
-            ]
-            try:
-                await application.bot.send_message(
-                    chat_id=tid,
-                    text=daily_msg,
-                    parse_mode="Markdown",
-                    reply_markup=InlineKeyboardMarkup(keyboard)
-                )
-                sent_count += 1
-            except Exception as e:
-                logger.warning(f"Failed to dispatch daily celestial alert to {tid}: {e}")
+            # Check if local time is currently 5:00 AM (hour == 5)
+            if user_local_dt.hour == 5:
+                today_str = user_local_dt.strftime("%Y-%m-%d")
+                last_alert_date = u.get("last_daily_alert_date")
 
-            # 2. Monthly Grand Celestial Blueprint (1st of month)
-            if is_first_of_month:
-                monthly_msg = self.celestial.generate_monthly_celestial_report(
-                    birth_date=b_date,
-                    birth_time=b_time,
-                    gender=gender,
-                    year=now_ict.year,
-                    month=now_ict.month
-                )
-                try:
-                    await application.bot.send_message(
-                        chat_id=tid,
-                        text=monthly_msg,
-                        parse_mode="Markdown"
+                # Dispatch Daily Celestial Report only once per day
+                if last_alert_date != today_str:
+                    b_date = u.get("birth_date") or "1990-05-15"
+                    b_time = u.get("birth_time") or "12:00"
+                    gender = u.get("gender") or "male"
+                    tz_name = u.get("timezone") or "Asia/Phnom_Penh"
+
+                    # 1. Daily Celestial Report
+                    daily_msg = self.celestial.generate_daily_celestial_report(
+                        birth_date=b_date,
+                        birth_time=b_time,
+                        gender=gender,
+                        target_date=user_local_dt.date()
                     )
-                except Exception:
-                    pass
+                    keyboard = [
+                        [InlineKeyboardButton("📜 មើលក្បួនតម្រា Tung Shu & ខ្មែរ", callback_data="cel_almanac")],
+                        [
+                            InlineKeyboardButton("⚙️ កែសម្រួលម៉ោងកំណើត", callback_data="cel_setbirth_prompt"),
+                            InlineKeyboardButton("🌐 កែប្រែ Timezone", callback_data="cel_settz_prompt")
+                        ],
+                        [InlineKeyboardButton("🏠 ម៉ឺនុយដើម", callback_data="menu_main")]
+                    ]
+                    try:
+                        await application.bot.send_message(
+                            chat_id=tid,
+                            text=daily_msg,
+                            parse_mode="Markdown",
+                            reply_markup=InlineKeyboardMarkup(keyboard)
+                        )
+                        self.db.update_user_alert_dispatch(tid, "daily", today_str)
+                        logger.info(f"Dispatched 5:00 AM local alert to User {tid} ({tz_name}, Offset: {utc_offset})")
+                    except Exception as e:
+                        logger.warning(f"Failed to dispatch daily celestial alert to {tid}: {e}")
 
-            # 3. Grand Annual Celestial Horoscope (New Year / Li Chun)
-            if is_new_year:
-                yearly_msg = self.celestial.generate_yearly_celestial_report(
-                    birth_date=b_date,
-                    birth_time=b_time,
-                    gender=gender,
-                    year=now_ict.year
-                )
-                try:
-                    await application.bot.send_message(
-                        chat_id=tid,
-                        text=yearly_msg,
-                        parse_mode="Markdown"
-                    )
-                except Exception:
-                    pass
+                    # 2. Monthly Grand Celestial Blueprint (1st of month)
+                    if user_local_dt.day == 1:
+                        month_str = user_local_dt.strftime("%Y-%m")
+                        if u.get("last_monthly_alert_month") != month_str:
+                            monthly_msg = self.celestial.generate_monthly_celestial_report(
+                                birth_date=b_date,
+                                birth_time=b_time,
+                                gender=gender,
+                                year=user_local_dt.year,
+                                month=user_local_dt.month
+                            )
+                            try:
+                                await application.bot.send_message(
+                                    chat_id=tid,
+                                    text=monthly_msg,
+                                    parse_mode="Markdown"
+                                )
+                                self.db.update_user_alert_dispatch(tid, "monthly", month_str)
+                            except Exception:
+                                pass
 
-        # Dispatch completion summary to Super Admin
-        admin_ids = config.ADMIN_USER_IDS
-        summary = (
-            "🌅 **របាយការណ៍បញ្ជូនហោរាសាស្ត្រ & ហុងស៊ុយប្រចាំថ្ងៃ (CELESTIAL DISPATCH REPORT)** 🌅\n"
-            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            f"• **ពេលវេលា:** `{now_ict.strftime('%Y-%m-%d %H:%M:%S ICT')}`\n"
-            f"• **ចំនួន VIP បានទទួលជោគជ័យ:** `{sent_count}` នាក់\n"
-            f"• **របាយការណ៍ខែថ្មី (1st of Month):** `{'✅ បានផ្ញើ' if is_first_of_month else '❌ មិនមែនថ្ងៃទី១'}`\n"
-            f"• **របាយការណ៍ចូលឆ្នាំថ្មី (New Year):** `{'✅ បានផ្ញើ' if is_new_year else '❌ មិនមែនថ្ងៃចូលឆ្នាំ'}`\n"
-            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            "✅ ប្រព័ន្ធដំណើរការពេញលេញ ២៤/៧!"
-        )
-        for adm in admin_ids:
-            try:
-                await application.bot.send_message(
-                    chat_id=adm,
-                    text=summary,
-                    parse_mode="Markdown"
-                )
-            except Exception:
-                pass
+                    # 3. Grand Annual Celestial Horoscope (New Year / Li Chun)
+                    is_new_year = (user_local_dt.month == 1 and user_local_dt.day == 1) or (user_local_dt.month == 2 and user_local_dt.day == 4)
+                    if is_new_year:
+                        year_str = str(user_local_dt.year)
+                        if u.get("last_yearly_alert_year") != year_str:
+                            yearly_msg = self.celestial.generate_yearly_celestial_report(
+                                birth_date=b_date,
+                                birth_time=b_time,
+                                gender=gender,
+                                year=user_local_dt.year
+                            )
+                            try:
+                                await application.bot.send_message(
+                                    chat_id=tid,
+                                    text=yearly_msg,
+                                    parse_mode="Markdown"
+                                )
+                                self.db.update_user_alert_dispatch(tid, "yearly", year_str)
+                            except Exception:
+                                pass
 
     async def backup_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /backup command to trigger manual instant backup and receive zip file (Admin Only)."""
@@ -1596,7 +1580,8 @@ class FengShuiTelegramBot:
                 InlineKeyboardButton("📜 ក្បួនតម្រាខ្មែរ & Tung Shu", callback_data="cel_almanac")
             ],
             [
-                InlineKeyboardButton("⚙️ កំណត់ម៉ោង & ថ្ងៃខែឆ្នាំកំណើត", callback_data="cel_setbirth_prompt")
+                InlineKeyboardButton("⚙️ កំណត់ម៉ោង & ថ្ងៃកំណើត", callback_data="cel_setbirth_prompt"),
+                InlineKeyboardButton("🌐 កំណត់តំបន់ម៉ោង (Timezone)", callback_data="cel_settz_prompt")
             ],
             [
                 InlineKeyboardButton("🏠 ម៉ឺនុយដើម", callback_data="menu_main")
@@ -1772,6 +1757,107 @@ class FengShuiTelegramBot:
         ]
         await self._safe_reply(update.message, msg, reply_markup=InlineKeyboardMarkup(keyboard))
 
+    async def settimezone_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Handle /settimezone or /tz [timezone_or_offset] (VIP Only)."""
+        from_user = update.effective_user
+        if not self._is_vip_or_admin(from_user.id):
+            await self._send_vip_required_notice(update.message, from_user.id)
+            return
+
+        args = context.args
+        if not args or len(args) < 1:
+            await self._send_timezone_menu(update.message, is_edit=False)
+            return
+
+        tz_input = " ".join(args)
+        tz_name, offset = self.celestial.resolve_timezone_offset(tz_input)
+        self.db.set_user_timezone(from_user.id, tz_name, offset)
+
+        now_local = self.celestial.get_user_local_datetime(offset)
+        msg = (
+            "🌐 **បានកំណត់តំបន់ម៉ោង (TIMEZONE) ដោយជោគជ័យ!**\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            f"👤 **អ្នកប្រើប្រាស់:** `{from_user.full_name}`\n"
+            f"📍 **Timezone:** `{tz_name}` (UTC{'+' if offset >= 0 else ''}{offset:g})\n"
+            f"⏱️ **ម៉ោងក្នុងតំបន់បច្ចុប្បន្ន:** `{now_local.strftime('%Y-%m-%d %I:%M:%S %p')}`\n\n"
+            "🌅 *ប្រព័ន្ធ Celestial Scheduler នឹងផ្ញើសារ Alert ហោរាសាស្ត្រជូនលោកអ្នកនៅម៉ោង ៥:០០ ព្រឹកចំម៉ោងនៃប្រទេសដែលលោកអ្នកកំពុងរស់នៅយ៉ាងសុក្រិតបំផុត!*"
+        )
+        keyboard = [
+            [
+                InlineKeyboardButton("🌅 មើលរាសីថ្ងៃនេះភ្លាមៗ", callback_data="cel_daily"),
+                InlineKeyboardButton("🌌 ម៉ឺនុយហោរាសាស្ត្រ", callback_data="menu_celestial")
+            ],
+            [InlineKeyboardButton("🏠 ម៉ឺនុយដើម", callback_data="menu_main")]
+        ]
+        await self._safe_reply(update.message, msg, reply_markup=InlineKeyboardMarkup(keyboard))
+
+    async def _send_timezone_menu(self, message_or_query, is_edit: bool = False):
+        """Interactive Timezone Selector Menu with 1-click Country buttons."""
+        text = (
+            "🌐 **កំណត់តំបន់ម៉ោងរស់នៅ (GLOBAL TIMEZONE SELECTOR) - PILLAR 9** 🌐\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "ដើម្បីឱ្យប្រព័ន្ធបញ្ជូនសារ Alert រាសីប្រចាំថ្ងៃនៅ **ម៉ោង ៥:០០ ព្រឹកពិតប្រាកដ** "
+            "តាមប្រទេសដែលលោកអ្នកកំពុងរស់នៅ សូមជ្រើសរើសតំបន់ម៉ោងខាងក្រោម ឬផ្ញើទីតាំង GPS Live Location មកកាន់ Bot៖\n\n"
+            "👇 **សូមជ្រើសរើសប្រទេស/តំបន់ម៉ោងរបស់អ្នក៖**"
+        )
+        keyboard = [
+            [
+                InlineKeyboardButton("🇰🇭 កម្ពុជា / ថៃ / វៀតណាម (UTC+7)", callback_data="tz_set_khmer"),
+                InlineKeyboardButton("🇫🇷 បារាំង / អឺរ៉ុប (UTC+1)", callback_data="tz_set_france")
+            ],
+            [
+                InlineKeyboardButton("🇺🇸 អាមេរិកខាងកើត NY (UTC-5)", callback_data="tz_set_usa_east"),
+                InlineKeyboardButton("🇺🇸 អាមេរិកខាងលិច CA (UTC-8)", callback_data="tz_set_usa_west")
+            ],
+            [
+                InlineKeyboardButton("🇦🇺 អូស្ត្រាលី Sydney (UTC+10)", callback_data="tz_set_australia"),
+                InlineKeyboardButton("🇯🇵 ជប៉ុន / កូរ៉េ (UTC+9)", callback_data="tz_set_japan")
+            ],
+            [
+                InlineKeyboardButton("🇨🇦 កាណាដា Toronto (UTC-5)", callback_data="tz_set_canada"),
+                InlineKeyboardButton("🇬🇧 អង់គ្លេស London (UTC+0)", callback_data="tz_set_uk")
+            ],
+            [
+                InlineKeyboardButton("🌌 ត្រឡប់ទៅម៉ឺនុយហោរាសាស្ត្រ", callback_data="menu_celestial"),
+                InlineKeyboardButton("🏠 ម៉ឺនុយដើម", callback_data="menu_main")
+            ]
+        ]
+        if is_edit:
+            await self._safe_edit(message_or_query, text, reply_markup=InlineKeyboardMarkup(keyboard))
+        else:
+            await self._safe_reply(message_or_query, text, reply_markup=InlineKeyboardMarkup(keyboard))
+
+    async def handle_location(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Handle 1-click GPS location sharing from user to auto-detect timezone."""
+        from_user = update.effective_user
+        if not self._is_vip_or_admin(from_user.id):
+            await self._send_vip_required_notice(update.message, from_user.id)
+            return
+
+        loc = update.message.location
+        if not loc:
+            return
+
+        lat = loc.latitude
+        lon = loc.longitude
+        tz_name, offset = self.celestial.resolve_coordinates_to_timezone(lat, lon)
+        self.db.set_user_timezone(from_user.id, tz_name, offset)
+
+        now_local = self.celestial.get_user_local_datetime(offset)
+        msg = (
+            "📍 **បានកំណត់ទីតាំង និងតំបន់ម៉ោងស្វ័យប្រវត្តិតាម GPS!**\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            f"🌐 **កូអរដោនេ:** `Lat {lat:.4f}, Lon {lon:.4f}`\n"
+            f"📍 **Timezone ដែលកំណត់បាន:** `{tz_name}` (UTC{'+' if offset >= 0 else ''}{offset:g})\n"
+            f"⏱️ **ម៉ោងក្នុងតំបន់បច្ចុប្បន្ន:** `{now_local.strftime('%Y-%m-%d %I:%M:%S %p')}`\n\n"
+            "🌅 *សារ Alert ហោរាសាស្ត្រប្រចាំថ្ងៃ នឹងផ្ញើជូនលោកអ្នកនៅម៉ោង ៥:០០ ព្រឹកជារៀងរាល់ថ្ងៃចំម៉ោងក្នុងប្រទេសរបស់លោកអ្នក!*"
+        )
+        keyboard = [
+            [InlineKeyboardButton("🌅 មើលរាសីថ្ងៃនេះភ្លាមៗ", callback_data="cel_daily")],
+            [InlineKeyboardButton("🏠 ម៉ឺនុយដើម", callback_data="menu_main")]
+        ]
+        await self._safe_reply(update.message, msg, reply_markup=InlineKeyboardMarkup(keyboard))
+
     async def button_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle all interactive inline keyboard clicks seamlessly."""
         query = update.callback_query
@@ -1785,7 +1871,7 @@ class FengShuiTelegramBot:
 
         try:
             # Check VIP permissions for gated callback features
-            gated_prefixes = ("curr_", "render_", "calc_", "cel_")
+            gated_prefixes = ("curr_", "render_", "calc_", "cel_", "tz_")
             gated_exact = {"menu_curriculum", "menu_gua", "menu_flyingstars", "menu_bazi", "menu_predict", "menu_render3d", "menu_ask", "menu_love", "menu_celestial"}
             if (data in gated_exact or any(data.startswith(p) for p in gated_prefixes)) and not self._is_vip_or_admin(from_user.id):
                 await self._send_vip_required_notice(query, from_user.id)
@@ -1912,6 +1998,32 @@ class FengShuiTelegramBot:
                     [InlineKeyboardButton("🏠 ម៉ឺនុយដើម", callback_data="menu_main")]
                 ]
                 await self._safe_edit(query, prompt_text, reply_markup=InlineKeyboardMarkup(keyboard))
+
+            elif data == "cel_settz_prompt":
+                await self._send_timezone_menu(query, is_edit=True)
+
+            # Interactive Timezone Selection Callbacks
+            elif data.startswith("tz_set_"):
+                tz_key = data.replace("tz_set_", "")
+                tz_name, offset = self.celestial.resolve_timezone_offset(tz_key)
+                self.db.set_user_timezone(from_user.id, tz_name, offset)
+                now_local = self.celestial.get_user_local_datetime(offset)
+
+                success_msg = (
+                    "🌐 **បានកំណត់តំបន់ម៉ោងជោគជ័យ!**\n"
+                    "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                    f"📍 **Timezone:** `{tz_name}` (UTC{'+' if offset >= 0 else ''}{offset:g})\n"
+                    f"⏱️ **ម៉ោងក្នុងតំបន់បច្ចុប្បន្ន:** `{now_local.strftime('%Y-%m-%d %I:%M:%S %p')}`\n\n"
+                    "🌅 *ប្រព័ន្ធនឹងផ្ញើសារ Alert ហោរាសាស្ត្រជូនលោកអ្នកនៅម៉ោង ៥:០០ ព្រឹកចំម៉ោងក្នុងតំបន់នេះជារៀងរាល់ថ្ងៃ!*"
+                )
+                keyboard = [
+                    [
+                        InlineKeyboardButton("🌅 មើលរាសីថ្ងៃនេះភ្លាមៗ", callback_data="cel_daily"),
+                        InlineKeyboardButton("🌌 ម៉ឺនុយហោរាសាស្ត្រ", callback_data="menu_celestial")
+                    ],
+                    [InlineKeyboardButton("🏠 ម៉ឺនុយដើម", callback_data="menu_main")]
+                ]
+                await self._safe_edit(query, success_msg, reply_markup=InlineKeyboardMarkup(keyboard))
 
             # Love & Peach Blossom Menu
             elif data == "menu_love":
@@ -2486,6 +2598,9 @@ class FengShuiTelegramBot:
             app.add_handler(CommandHandler("almanac", self.almanac_command))
             app.add_handler(CommandHandler("tungshu", self.almanac_command))
             app.add_handler(CommandHandler("setbirth", self.setbirth_command))
+            app.add_handler(CommandHandler("settimezone", self.settimezone_command))
+            app.add_handler(CommandHandler("timezone", self.settimezone_command))
+            app.add_handler(CommandHandler("tz", self.settimezone_command))
             app.add_handler(CommandHandler("celestial", self.celestial_command))
             app.add_handler(CommandHandler("love", self.love_command))
             app.add_handler(CommandHandler("mahasneh", self.love_command))
@@ -2493,6 +2608,7 @@ class FengShuiTelegramBot:
 
             # Callbacks & Messages
             app.add_handler(CallbackQueryHandler(self.button_callback))
+            app.add_handler(MessageHandler(filters.LOCATION, self.handle_location))
             app.add_handler(MessageHandler(filters.PHOTO, self.handle_photo))
             app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, self.handle_message))
 
