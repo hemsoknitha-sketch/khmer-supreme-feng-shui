@@ -705,7 +705,7 @@ class DatabaseManager:
             return cursor.rowcount > 0
 
     def clear_family_members(self, telegram_id: int) -> bool:
-        """Clear all family members for a user except 'self' if desired."""
+        """Clear all family members for a user."""
         with get_db_connection() as conn:
             cursor = conn.cursor()
             cursor.execute("""
@@ -714,6 +714,63 @@ class DatabaseManager:
             """, (telegram_id,))
             conn.commit()
             return cursor.rowcount > 0
+
+    def has_registered_profile(self, telegram_id: int) -> bool:
+        """Check if user has registered their own personal BaZi/Feng Shui profile in /data or users table."""
+        # 1. Check family_profiles for 'self'
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT id FROM family_profiles
+                WHERE telegram_id = ? AND relation_type = 'self'
+                LIMIT 1;
+            """, (telegram_id,))
+            if cursor.fetchone():
+                return True
+
+            # 2. Check users table for birth_date
+            cursor.execute("""
+                SELECT birth_date FROM users
+                WHERE telegram_id = ? AND birth_date IS NOT NULL AND birth_date != ''
+                LIMIT 1;
+            """, (telegram_id,))
+            row = cursor.fetchone()
+            if row and row["birth_date"]:
+                return True
+
+        return False
+
+    def get_self_profile(self, telegram_id: int) -> Optional[Dict[str, Any]]:
+        """Retrieve main user's personal profile from family_profiles or users table."""
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT * FROM family_profiles
+                WHERE telegram_id = ? AND relation_type = 'self'
+                LIMIT 1;
+            """, (telegram_id,))
+            row = cursor.fetchone()
+            if row:
+                return dict(row)
+
+            cursor.execute("""
+                SELECT telegram_id, birth_date, birth_time, gender
+                FROM users
+                WHERE telegram_id = ? AND birth_date IS NOT NULL AND birth_date != ''
+                LIMIT 1;
+            """, (telegram_id,))
+            u_row = cursor.fetchone()
+            if u_row and u_row["birth_date"]:
+                return {
+                    "telegram_id": telegram_id,
+                    "relation_type": "self",
+                    "relation_label": "ខ្ញុំ",
+                    "birth_date": u_row["birth_date"],
+                    "birth_time": u_row["birth_time"] or "12:00",
+                    "gender": u_row["gender"] or "male"
+                }
+
+        return None
 
 
 # Global Singleton Instance

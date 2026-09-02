@@ -191,6 +191,41 @@ class FengShuiTelegramBot:
         else:
             await self._safe_edit(message_or_query, msg, reply_markup=InlineKeyboardMarkup(keyboard))
 
+    def _has_registered_profile(self, user_id: int) -> bool:
+        """Check if user has registered their personal profile in /data or database (Super Admins bypass)."""
+        if user_id in config.ADMIN_USER_IDS:
+            return True
+        user = self.db.get_or_create_user(user_id)
+        if user.get("role") == "super_admin":
+            return True
+        return self.db.has_registered_profile(user_id)
+
+    async def _send_profile_required_notice(self, message_or_query, from_user_id: int):
+        """Send smart mandatory profile registration notice explaining why /data is essential before analysis."""
+        msg = (
+            "⚠️ **សេចក្តីជូនដំណឹង៖ តម្រូវឱ្យកត់ត្រាព័ត៌មានផ្ទាល់ខ្លួនក្នុង /data ជាមុនសិន!** ⚠️\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "🌟 **ហេតុអ្វីបានជាចាំបាច់ត្រូវបញ្ចូលព័ត៌មានផ្ទាល់ខ្លួន?**\n"
+            "ក្នុងក្បួនហុងស៊ុយបុរាណចិន និងខ្មែរកម្រិតកំពូល (Supreme Feng Shui AGI) ការវិភាគទិសដៅ តុល្យភាពធាតុទាំង ៥ "
+            "ជោគជតារាសី ៨ សសរស្តម្ភ (BaZi) និងក្បួនតម្រាសកល **មិនអាចទស្សទាយបែបស្មានៗ ឬគ្មានទិន្នន័យពិតប្រាកដបានឡើយ**។\n\n"
+            "ដើម្បីឱ្យការវិភាគមានភាព **សុក្រិតឥតខ្ចោះ ១០០%** និងផ្តល់ដំណោះស្រាយចំជោគជតាជីវិតពិតប្រាកដរបស់លោកអ្នក "
+            "ប្រព័ន្ធតម្រូវឱ្យកត់ត្រា ម៉ោង ថ្ងៃ ខែ ឆ្នាំកំណើត និងភេទផ្ទាល់ខ្លួនជាមុនសិន។\n\n"
+            "💡 **សូមវាយពាក្យបញ្ជាដូចខាងក្រោម៖**\n"
+            "`/data ខ្ញុំ <YYYY-MM-DD> [HH:MM] [male/female]`\n\n"
+            "👉 **ឧទាហរណ៍ជាក់ស្តែង៖**\n"
+            "`/data ខ្ញុំ 1990-05-15 08:30 male`\n\n"
+            "*(ចំណាំ៖ លោកអ្នកអាចចូលរៀនមេរៀនទាំង ១,០០០ ក្នុង /curriculum បានដោយសេរីគ្រប់ពេលវេលា)*"
+        )
+        keyboard = [
+            [InlineKeyboardButton("➕ បញ្ចូលទិន្នន័យឥឡូវនេះ", callback_data="fam_add_prompt")],
+            [InlineKeyboardButton("📚 រៀនមេរៀនទាំង ១០០០ (Curriculum)", callback_data="menu_curriculum")],
+            [InlineKeyboardButton("🏠 ម៉ឺនុយដើម", callback_data="menu_main")]
+        ]
+        if hasattr(message_or_query, "reply_text"):
+            await self._safe_reply(message_or_query, msg, reply_markup=InlineKeyboardMarkup(keyboard))
+        else:
+            await self._safe_edit(message_or_query, msg, reply_markup=InlineKeyboardMarkup(keyboard))
+
     def _get_main_keyboard(self, user_id: int = 0) -> InlineKeyboardMarkup:
         """Construct role-based interactive keyboard: Super Admin vs VIP vs Free/Unactivated."""
         user = self.db.get_or_create_user(user_id) if user_id else {"role": "user", "vip_tier": "free"}
@@ -1249,6 +1284,10 @@ class FengShuiTelegramBot:
 
         args = context.args
         if not args or len(args) < 1:
+            if not self._has_registered_profile(from_user.id):
+                await self._send_profile_required_notice(update.message, from_user.id)
+                return
+
             text = (
                 "🧭 **របៀបគណនា Life Gua (San Yuan Ming Gua):**\n"
                 "សូមសរសេរ៖ `/gua <ឆ្នាំកំណើត> <ភេទ male/female>`\n"
@@ -1303,6 +1342,9 @@ class FengShuiTelegramBot:
         if not self._is_vip_or_admin(from_user.id):
             await self._send_vip_required_notice(update.message, from_user.id)
             return
+        if not self._has_registered_profile(from_user.id):
+            await self._send_profile_required_notice(update.message, from_user.id)
+            return
 
         year = 2024
         res = self.calc_engine.calculate_flying_stars(year)
@@ -1344,6 +1386,10 @@ class FengShuiTelegramBot:
             return
         args = context.args
         if not args or len(args) < 1:
+            if not self._has_registered_profile(from_user.id):
+                await self._send_profile_required_notice(update.message, from_user.id)
+                return
+
             text = (
                 "🔮 **របៀបវិភាគ BaZi សសរស្តម្ភទាំង ៤:**\n"
                 "សូមសរសេរ៖ `/bazi YYYY-MM-DD [HH:MM]`\n"
@@ -1393,6 +1439,9 @@ class FengShuiTelegramBot:
         if not self._is_vip_or_admin(from_user.id):
             await self._send_vip_required_notice(update.message, from_user.id)
             return
+        if not self._has_registered_profile(from_user.id):
+            await self._send_profile_required_notice(update.message, from_user.id)
+            return
 
         args = context.args
         if not args:
@@ -1430,6 +1479,9 @@ class FengShuiTelegramBot:
         from_user = update.effective_user
         if not self._is_vip_or_admin(from_user.id):
             await self._send_vip_required_notice(update.message, from_user.id)
+            return
+        if not self._has_registered_profile(from_user.id):
+            await self._send_profile_required_notice(update.message, from_user.id)
             return
 
         args = context.args
@@ -1675,9 +1727,14 @@ class FengShuiTelegramBot:
             await self._send_vip_required_notice(update.message, from_user.id)
             return
 
+        # 4. Mandatory Profile Gate: User must register personal profile in /data before asking AI
+        if not self._has_registered_profile(from_user.id):
+            await self._send_profile_required_notice(update.message, from_user.id)
+            return
+
         await update.message.chat.send_action("typing")
 
-        # 4. Retrieve family members if registered to inject rich household context
+        # 5. Retrieve family members if registered to inject rich household context
         family_members = self.db.get_family_members(from_user.id)
         family_context_str = ""
         if family_members:
@@ -1729,6 +1786,11 @@ class FengShuiTelegramBot:
             await self._send_vip_required_notice(update.message, from_user.id)
             return
 
+        # Mandatory Profile Gate: User must register personal profile in /data before Vision audit
+        if not self._has_registered_profile(from_user.id):
+            await self._send_profile_required_notice(update.message, from_user.id)
+            return
+
         await update.message.chat.send_action("typing")
 
         try:
@@ -1775,6 +1837,9 @@ class FengShuiTelegramBot:
         if not self._is_vip_or_admin(from_user.id):
             await self._send_vip_required_notice(update.message, from_user.id)
             return
+        if not self._has_registered_profile(from_user.id):
+            await self._send_profile_required_notice(update.message, from_user.id)
+            return
         await self._send_render3d_menu(update.message, is_edit=False)
 
     async def _send_render3d_menu(self, message_or_query, is_edit: bool = False):
@@ -1810,6 +1875,9 @@ class FengShuiTelegramBot:
         from_user = update.effective_user
         if not self._is_vip_or_admin(from_user.id):
             await self._send_vip_required_notice(update.message, from_user.id)
+            return
+        if not self._has_registered_profile(from_user.id):
+            await self._send_profile_required_notice(update.message, from_user.id)
             return
         await self._send_celestial_menu(update.message, is_edit=False)
 
@@ -1897,11 +1965,14 @@ class FengShuiTelegramBot:
         if not self._is_vip_or_admin(from_user.id):
             await self._send_vip_required_notice(update.message, from_user.id)
             return
+        if not self._has_registered_profile(from_user.id):
+            await self._send_profile_required_notice(update.message, from_user.id)
+            return
 
-        user = self.db.get_or_create_user(from_user.id)
-        b_date = user.get("birth_date") or "1990-05-15"
-        b_time = user.get("birth_time") or "12:00"
-        gender = user.get("gender") or "male"
+        self_prof = self.db.get_self_profile(from_user.id) or {}
+        b_date = self_prof.get("birth_date") or "1990-05-15"
+        b_time = self_prof.get("birth_time") or "12:00"
+        gender = self_prof.get("gender") or "male"
 
         report = self.celestial.generate_daily_celestial_report(b_date, b_time, gender)
         keyboard = [
@@ -1925,11 +1996,14 @@ class FengShuiTelegramBot:
         if not self._is_vip_or_admin(from_user.id):
             await self._send_vip_required_notice(update.message, from_user.id)
             return
+        if not self._has_registered_profile(from_user.id):
+            await self._send_profile_required_notice(update.message, from_user.id)
+            return
 
-        user = self.db.get_or_create_user(from_user.id)
-        b_date = user.get("birth_date") or "1990-05-15"
-        b_time = user.get("birth_time") or "12:00"
-        gender = user.get("gender") or "male"
+        self_prof = self.db.get_self_profile(from_user.id) or {}
+        b_date = self_prof.get("birth_date") or "1990-05-15"
+        b_time = self_prof.get("birth_time") or "12:00"
+        gender = self_prof.get("gender") or "male"
 
         report = self.celestial.generate_monthly_celestial_report(b_date, b_time, gender)
         keyboard = [
@@ -1950,11 +2024,14 @@ class FengShuiTelegramBot:
         if not self._is_vip_or_admin(from_user.id):
             await self._send_vip_required_notice(update.message, from_user.id)
             return
+        if not self._has_registered_profile(from_user.id):
+            await self._send_profile_required_notice(update.message, from_user.id)
+            return
 
-        user = self.db.get_or_create_user(from_user.id)
-        b_date = user.get("birth_date") or "1990-05-15"
-        b_time = user.get("birth_time") or "12:00"
-        gender = user.get("gender") or "male"
+        self_prof = self.db.get_self_profile(from_user.id) or {}
+        b_date = self_prof.get("birth_date") or "1990-05-15"
+        b_time = self_prof.get("birth_time") or "12:00"
+        gender = self_prof.get("gender") or "male"
 
         report = self.celestial.generate_yearly_celestial_report(b_date, b_time, gender)
         keyboard = [
@@ -2127,6 +2204,13 @@ class FengShuiTelegramBot:
             gated_exact = {"menu_curriculum", "menu_gua", "menu_flyingstars", "menu_bazi", "menu_predict", "menu_render3d", "menu_ask", "menu_love", "menu_celestial", "menu_family", "fam_list"}
             if (data in gated_exact or any(data.startswith(p) for p in gated_prefixes)) and not self._is_vip_or_admin(from_user.id):
                 await self._send_vip_required_notice(query, from_user.id)
+                return
+
+            # Check mandatory profile registration in /data for non-curriculum analytical features (1000 Lessons exempt)
+            profile_gated_prefixes = ("render_", "calc_", "cel_", "love_tr_")
+            profile_gated_exact = {"menu_gua", "menu_flyingstars", "menu_bazi", "menu_predict", "menu_render3d", "menu_ask", "menu_love", "menu_celestial"}
+            if (data in profile_gated_exact or any(data.startswith(p) for p in profile_gated_prefixes)) and not self._has_registered_profile(from_user.id):
+                await self._send_profile_required_notice(query, from_user.id)
                 return
 
             # Navigation: Main Menu

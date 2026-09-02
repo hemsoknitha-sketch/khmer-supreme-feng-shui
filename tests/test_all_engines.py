@@ -245,6 +245,38 @@ class TestSupremeFengShuiSystem(unittest.TestCase):
         self.assertNotIn("**", report_a)
         self.assertNotIn("==", report_a)
 
+    # 15. Test Mandatory Profile Gate & 1000 Curriculum Exemption
+    def test_15_mandatory_profile_gate_and_curriculum_exemption(self):
+        """Verify that VIP users without /data profile are gated from analysis but can study curriculum."""
+        from database.db_manager import db_manager
+        from bot.telegram_bot import FengShuiTelegramBot
+
+        test_vip_id = 888777
+        db_manager.clear_family_members(test_vip_id)
+        # Create user without birth profile
+        db_manager.get_or_create_user(test_vip_id, username="vip_test", full_name="VIP Test User")
+        db_manager.set_user_vip_manually(test_vip_id, "monthly", admin_id=859271875)
+
+        bot = FengShuiTelegramBot("8772506380:AAG_qjamcB9ETNaBllNve3-qcPuLgcncgp4")
+
+        # 1. Initially VIP has NO registered profile in /data
+        self.assertFalse(db_manager.has_registered_profile(test_vip_id))
+        self.assertFalse(bot._has_registered_profile(test_vip_id))
+
+        # 2. Super Admin always has bypass
+        admin_id = 859271875
+        self.assertTrue(bot._has_registered_profile(admin_id))
+
+        # 3. Register self profile in /data
+        db_manager.upsert_family_member(
+            test_vip_id, "self", "ខ្ញុំ", "1990-05-15", "08:30", "male",
+            day_master="Wood", useful_god="Water", zodiac_animal="Horse", life_gua=1
+        )
+
+        # 4. Now VIP has registered profile
+        self.assertTrue(db_manager.has_registered_profile(test_vip_id))
+        self.assertTrue(bot._has_registered_profile(test_vip_id))
+
 
 if __name__ == "__main__":
     unittest.main()
