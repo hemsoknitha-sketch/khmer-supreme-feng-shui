@@ -77,8 +77,9 @@ class SystemConfig:
     API_HOST: str = os.getenv("API_HOST", "0.0.0.0")
     API_PORT: int = int(os.getenv("API_PORT", "8000"))
 
-    # Memory Management for 1GB VPS
+    # Memory & Storage Management for 1GB VPS (30GB NVMe Disk)
     MAX_RAM_MB: int = int(os.getenv("MAX_RAM_MB", "800"))
+    VPS_DISK_GB: float = float(os.getenv("VPS_DISK_GB", "30.0"))
     ENABLE_LOCAL_CACHE: bool = os.getenv("ENABLE_LOCAL_CACHE", "true").lower() == "true"
     CACHE_EXPIRATION_HOURS: int = 24
     MAX_FREE_DAILY_QUERIES: int = int(os.getenv("MAX_FREE_DAILY_QUERIES", "0"))

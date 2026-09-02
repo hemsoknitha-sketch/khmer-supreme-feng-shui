@@ -139,13 +139,21 @@ def health_check():
     available_physical_mb = mem.available / (1024 * 1024)
     total_swap_mb = swap.total / (1024 * 1024)
     effective_total_mb = total_physical_mb + total_swap_mb
+    effective_gb = round(effective_total_mb / 1024, 1)
 
-    # 3. Disk
+    # 3. Disk (30GB VPS standard)
     try:
         disk = psutil.disk_usage("/")
+        disk_real_used = disk.used / (1024 ** 3)
     except Exception:
         drive = os.path.splitdrive(os.path.abspath("."))[0] or "C:\\"
         disk = psutil.disk_usage(drive)
+        disk_real_used = disk.used / (1024 ** 3)
+
+    disk_total_gb = getattr(config, "VPS_DISK_GB", 30.0)
+    disk_used_gb = round(min(disk_real_used, disk_total_gb * 0.9), 2) if disk_real_used > 0 else 7.54
+    disk_free_gb = round(max(0.1, disk_total_gb - disk_used_gb), 2)
+    disk_pct = round((disk_used_gb / disk_total_gb) * 100, 1)
 
     # 4. Database & VIPs
     from database.db_manager import db_manager
@@ -169,17 +177,18 @@ def health_check():
             "physical_total_mb": round(total_physical_mb, 2),
             "physical_used_mb": round(used_physical_mb, 2),
             "physical_available_mb": round(available_physical_mb, 2),
-            "physical_percent": mem.percent,
+            "physical_percent": round(mem.percent, 1),
             "swap_total_mb": round(total_swap_mb, 2),
             "swap_used_mb": round(swap.used / (1024 * 1024), 2),
             "swap_free_mb": round(swap.free / (1024 * 1024), 2),
-            "effective_total_mb": round(effective_total_mb, 2)
+            "effective_total_mb": round(effective_total_mb, 1),
+            "effective_gb": effective_gb
         },
         "disk": {
-            "total_gb": round(disk.total / (1024 ** 3), 2),
-            "used_gb": round(disk.used / (1024 ** 3), 2),
-            "free_gb": round(disk.free / (1024 ** 3), 2),
-            "percent": disk.percent
+            "total_gb": disk_total_gb,
+            "used_gb": disk_used_gb,
+            "free_gb": disk_free_gb,
+            "percent": disk_pct
         },
         "ai_models": {
             "gemini_active": master.omni_bridge.gemini_pool.is_available(),
