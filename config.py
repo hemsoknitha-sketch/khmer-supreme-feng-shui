@@ -37,6 +37,10 @@ class SystemConfig:
     HF_MODEL_TRAINED: str = os.getenv("HF_MODEL_TRAINED", "hemsinath/khmer-supreme-feng-shui")
     HF_MODEL_BORAMEY: str = os.getenv("HF_MODEL_BORAMEY", "hemsinath/khmer-supreme-feng-shui")
     HF_MODEL_REASONER: str = os.getenv("HF_MODEL_REASONER", "deepseek-ai/DeepSeek-R1-Distill-Qwen-7B")
+    HF_MODEL_MAHASNEH: str = os.getenv("HF_MODEL_MAHASNEH", "Qwen/Qwen2.5-72B-Instruct")
+    HF_MODEL_LLAMA: str = os.getenv("HF_MODEL_LLAMA", "meta-llama/Llama-3.3-70B-Instruct")
+    HF_MODEL_DEEPSEEK_R1: str = os.getenv("HF_MODEL_DEEPSEEK_R1", "deepseek-ai/DeepSeek-R1-Distill-Qwen-32B")
+    HF_MODEL_MISTRAL: str = os.getenv("HF_MODEL_MISTRAL", "mistralai/Mistral-Small-24B-Instruct-2501")
     HF_MODEL_EMBEDDER: str = os.getenv("HF_MODEL_EMBEDDER", "BAAI/bge-m3")
 
     # Google Gemini API Multi-Key Pool & Rotation (Supports single or multiple keys comma-separated)

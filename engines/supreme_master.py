@@ -18,6 +18,7 @@ from engines.omni_ai_bridge import omni_ai_bridge, OmniAIBridge
 from engines.rag_client import RAGKnowledgeRetriever
 from engines.alert_predictor import AlertPredictionEngine
 from engines.chronos_cycle import ChronosCycleEngine
+from engines.mahasneh_love_engine import mahasneh_love_engine
 
 logger = logging.getLogger("SupremeFengShui.Master")
 
@@ -33,6 +34,7 @@ class SupremeFengShuiMaster:
         self.rag_engine = RAGKnowledgeRetriever(token=hf_token)
         self.alert_predictor = AlertPredictionEngine()
         self.chronos_engine = ChronosCycleEngine()
+        self.love_engine = mahasneh_love_engine
         logger.info("All 4 Engine Groups & Omni AI Mesh successfully linked to Master Orchestrator.")
 
     def consult(
@@ -80,11 +82,18 @@ class SupremeFengShuiMaster:
             if pred_res.get("success"):
                 evidence_packet["fortune_prediction"] = pred_res["data"]
 
-        # 5. Knowledge Retrieval (FS-Embedder-M3)
+        # 5. Maha Sneh & Peach Blossom Engine (ក្បួនហុងស៊ុយ និងមហាស្នេហ៍)
+        love_keywords = ["ស្នេហ៍", "ស្នេហា", "គូស្នេហ៍", "ផ្កាប៉េស", "peach blossom", "love", "marriage", "អន្ទងចិត្ត", "បន្ទន់ចិត្ត"]
+        if any(k in query.lower() for k in love_keywords) and birth_date:
+            love_res = self.love_engine.analyze_love_profile(birth_date, gender)
+            if love_res.get("success"):
+                evidence_packet["mahasneh_love"] = love_res
+
+        # 6. Knowledge Retrieval (FS-Embedder-M3)
         relevant_docs = self.rag_engine.search_knowledge(query, top_k=3)
         knowledge_context = "\n".join([f"• [{d['category']}] {d['title']}: {d['text']}" for d in relevant_docs])
 
-        # 6. Construct Verified Master System Prompt
+        # 7. Construct Verified Master System Prompt
         system_prompt = (
             "អ្នកគឺជា FS-Supreme-Master (កំពូលបរមគ្រូបញ្ញាសិប្បនិម្មិតហុងស៊ុយបុរាណ AGI - Master Level)។ "
             "ចូរឆ្លើយតបយ៉ាងពិរោះ ជ្រាលជ្រៅ និងត្រឹមត្រូវតាមក្បួនខ្នាតបុរាណចិន និងខ្មែរ ដោយផ្អែកលើទិន្នន័យជាក់ស្តែងខាងក្រោម៖\n\n"

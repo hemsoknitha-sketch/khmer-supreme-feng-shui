@@ -94,6 +94,13 @@ class ConsultRequest(BaseModel):
     complex_reasoning: bool = Field(default=False)
 
 
+class LoveAnalyzeRequest(BaseModel):
+    birth_date_1: str = Field(..., example="1990-05-15")
+    gender_1: str = Field(default="male", example="male")
+    birth_date_2: Optional[str] = Field(default=None, example="1992-08-20")
+    gender_2: Optional[str] = Field(default="female", example="female")
+
+
 # =============================================================================
 # API Endpoints
 # =============================================================================
@@ -260,6 +267,26 @@ def consult_ai(req: ConsultRequest):
     if "synthesis" in res and isinstance(res["synthesis"], str):
         res["synthesis"] = security_guard.redact_secrets(res["synthesis"])
 
+    return res
+
+
+@app.post("/api/love/analyze")
+def analyze_love(req: LoveAnalyzeRequest):
+    """
+    8-Pillars Universal Zenith Love & Peach Blossom Analysis ("ក្បួនហុងស៊ុយ និងមហាស្នេហ៍").
+    Calculates Peach Blossom direction, 8-Pillars BaZi love compatibility, Useful God remedy,
+    attraction strategy (យុទ្ធសាស្ត្រអន្ទងចិត្ត), and heart-softening strategy (វិធីសាស្ត្របន្ទន់ចិត្ត).
+    """
+    from engines.mahasneh_love_engine import mahasneh_love_engine
+
+    res = mahasneh_love_engine.analyze_love_profile(
+        birth_date_1=req.birth_date_1,
+        gender_1=req.gender_1,
+        birth_date_2=req.birth_date_2,
+        gender_2=req.gender_2
+    )
+    if not res.get("success"):
+        raise HTTPException(status_code=400, detail=res.get("error", "Failed to analyze love profile"))
     return res
 
 

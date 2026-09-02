@@ -31,6 +31,7 @@ from engines.curriculum_engine import curriculum_engine
 from engines.security_guard import security_guard
 from engines.vision_3d_engine import vision_3d_engine
 from engines.backup_engine import backup_engine
+from engines.mahasneh_love_engine import mahasneh_love_engine
 from database.db_manager import db_manager
 
 logger = logging.getLogger("SupremeFengShui.TelegramBot")
@@ -49,6 +50,7 @@ class FengShuiTelegramBot:
     - Multimodal Vision Audit & 3D 4K Architectural Generation (Pillar 1 Vision)
     - Enterprise Security Shield (Anti-Spam, Prompt Injection Guard, Secret Redaction)
     - Automated 24-Hour User Data Protection & Backup Engine (2:00 AM ICT Zip Dispatch)
+    - "ក្បួនហុងស៊ុយ និងមហាស្នេហ៍" (Maha Sneh, Peach Blossom & BaZi 8-Pillars Love Match)
     """
 
     def __init__(self, token: str = None):
@@ -61,6 +63,7 @@ class FengShuiTelegramBot:
         self.security = security_guard
         self.vision = vision_3d_engine
         self.backup = backup_engine
+        self.love = mahasneh_love_engine
 
     async def _safe_reply(self, message, text: str, reply_markup=None):
         """Safely send markdown text, automatically redacting secrets, falling back to plain text, and guarding max length."""
@@ -143,14 +146,17 @@ class FengShuiTelegramBot:
                     InlineKeyboardButton("📊 ទស្សន៍ទាយសំណាង", callback_data="menu_predict")
                 ],
                 [
-                    InlineKeyboardButton("🎨 បង្កើតប្លង់ 3D 4K", callback_data="menu_render3d"),
-                    InlineKeyboardButton("💬 សួរគ្រូហុងស៊ុយ AI", callback_data="menu_ask")
+                    InlineKeyboardButton("💖 ហុងស៊ុយ & មហាស្នេហ៍", callback_data="menu_love"),
+                    InlineKeyboardButton("🎨 បង្កើតប្លង់ 3D 4K", callback_data="menu_render3d")
                 ],
                 [
-                    InlineKeyboardButton("👑 ផតថល VIP & អាជ្ញាប័ណ្ណ", callback_data="menu_vip"),
+                    InlineKeyboardButton("💬 សួរគ្រូហុងស៊ុយ AI", callback_data="menu_ask"),
+                    InlineKeyboardButton("👑 ផតថល VIP & អាជ្ញាប័ណ្ណ", callback_data="menu_vip")
+                ],
+                [
+                    InlineKeyboardButton("🛡️ ផ្ទាំងគ្រប់គ្រង Super Admin", callback_data="admin_panel"),
                     InlineKeyboardButton("⚡ ស្ថានភាពប្រព័ន្ធ", callback_data="menu_health")
                 ],
-                [InlineKeyboardButton("🛡️ ផ្ទាំងគ្រប់គ្រង Super Admin", callback_data="admin_panel")],
                 [InlineKeyboardButton("❓ ជំនួយ (Help)", callback_data="menu_help")]
             ]
         elif is_vip:
@@ -165,14 +171,17 @@ class FengShuiTelegramBot:
                     InlineKeyboardButton("📊 ទស្សន៍ទាយសំណាង", callback_data="menu_predict")
                 ],
                 [
-                    InlineKeyboardButton("🎨 បង្កើតប្លង់ 3D 4K", callback_data="menu_render3d"),
-                    InlineKeyboardButton("💬 សួរគ្រូហុងស៊ុយ AI", callback_data="menu_ask")
+                    InlineKeyboardButton("💖 ហុងស៊ុយ & មហាស្នេហ៍", callback_data="menu_love"),
+                    InlineKeyboardButton("🎨 បង្កើតប្លង់ 3D 4K", callback_data="menu_render3d")
                 ],
                 [
-                    InlineKeyboardButton("👑 ស្ថានភាព VIP របស់ខ្ញុំ", callback_data="menu_vip"),
-                    InlineKeyboardButton("⚡ ស្ថានភាពប្រព័ន្ធ", callback_data="menu_health")
+                    InlineKeyboardButton("💬 សួរគ្រូហុងស៊ុយ AI", callback_data="menu_ask"),
+                    InlineKeyboardButton("👑 ស្ថានភាព VIP របស់ខ្ញុំ", callback_data="menu_vip")
                 ],
-                [InlineKeyboardButton("❓ ជំនួយ (Help)", callback_data="menu_help")]
+                [
+                    InlineKeyboardButton("⚡ ស្ថានភាពប្រព័ន្ធ", callback_data="menu_health"),
+                    InlineKeyboardButton("❓ ជំនួយ (Help)", callback_data="menu_help")
+                ]
             ]
         else:
             # Free / Unactivated user: compelling gated buttons directing to @HemSinath
@@ -194,6 +203,7 @@ class FengShuiTelegramBot:
         """Register native command menu button in Telegram UI and start background schedulers."""
         commands = [
             BotCommand("start", "🌟 ផ្ទាំងដើម & ម៉ឺនុយបញ្ជា (Main Dashboard)"),
+            BotCommand("love", "💖 ហុងស៊ុយ & មហាស្នេហ៍ (Peach Blossom)"),
             BotCommand("render3d", "🎨 បង្កើតប្លង់ 3D 4K & ពិនិត្យរូបភាព"),
             BotCommand("health", "⚡ ត្រួតពិនិត្យសុខភាព VPS, CPU, RAM, Disk, AI"),
             BotCommand("vip", "👑 ស្ថានភាព VIP & បញ្ចូល Key អាជ្ញាប័ណ្ណ"),
@@ -1122,6 +1132,57 @@ class FengShuiTelegramBot:
             ]
             await self._safe_reply(update.message, msg, reply_markup=InlineKeyboardMarkup(keyboard))
 
+    async def love_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Handle /love and /mahasneh command for 8-Pillars Peach Blossom & Universal Zenith Love Analysis."""
+        from_user = update.effective_user
+        if not self._is_vip_or_admin(from_user.id):
+            await self._send_vip_required_notice(update.message, from_user.id)
+            return
+
+        args = context.args
+        if not args:
+            guide_text = (
+                "💖 **ក្បួនហុងស៊ុយ និងមហាស្នេហ៍ (Peach Blossom & 8-Pillars Love Zenith)** 💖\n"
+                "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                "🌟 **របៀបប្រើប្រាស់ពាក្យបញ្ជាដើម្បីវិភាគក្បួនមហាស្នេហ៍៖**\n\n"
+                "1️⃣ **វិភាគទាក់ទាញស្នេហាផ្ទាល់ខ្លួន (Peach Blossom Star):**\n"
+                "`/love <YYYY-MM-DD> <male/female>`\n"
+                "👉 **ឧទាហរណ៍៖** `/love 1990-05-15 male`\n\n"
+                "2️⃣ **វិភាគភាពស៊ីចង្វាក់ស្នេហាគូស្នេហ៍ (៨ សសរស្តម្ភ BaZi Compatibility):**\n"
+                "`/love <ថ្ងៃខែឆ្នាំខ្លួនឯង> <ភេទ> <ថ្ងៃខែឆ្នាំគូស្នេហ៍> <ភេទ>`\n"
+                "👉 **ឧទាហរណ៍៖** `/love 1990-05-15 male 1992-08-20 female`\n\n"
+                "*(ប្រព័ន្ធនឹងបង្កើតរបាយការណ៍ Universal Zenith Report រួមមាន៖ ធាតុឱសថព្យាបាលរាសី, យុទ្ធសាស្ត្រអន្ទងចិត្ត, និងវិធីសាស្ត្របន្ទន់ចិត្ត!)*"
+            )
+            keyboard = [
+                [InlineKeyboardButton("💬 សួរគ្រូហុងស៊ុយ AI", callback_data="menu_ask")],
+                [InlineKeyboardButton("🏠 ម៉ឺនុយដើម", callback_data="menu_main")]
+            ]
+            await self._safe_reply(update.message, guide_text, reply_markup=InlineKeyboardMarkup(keyboard))
+            return
+
+        b_date_1 = args[0]
+        gender_1 = args[1] if len(args) > 1 else "male"
+        b_date_2 = args[2] if len(args) > 2 else None
+        gender_2 = args[3] if len(args) > 3 else "female"
+
+        res = self.love.analyze_love_profile(
+            birth_date_1=b_date_1,
+            gender_1=gender_1,
+            birth_date_2=b_date_2,
+            gender_2=gender_2
+        )
+
+        if not res.get("success"):
+            await self._safe_reply(update.message, f"❌ កំហុសក្នុងការវិភាគ៖ {res.get('error')}")
+            return
+
+        msg = res["zenith_report"]
+        keyboard = [
+            [InlineKeyboardButton("💬 ពិគ្រោះក្បួនស្នេហ៍លម្អិត", callback_data="menu_ask")],
+            [InlineKeyboardButton("🏠 ម៉ឺនុយដើម", callback_data="menu_main")]
+        ]
+        await self._safe_reply(update.message, msg, reply_markup=InlineKeyboardMarkup(keyboard))
+
     async def handle_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle conversational natural language messages with VIP limit & security enforcement."""
         from_user = update.effective_user
@@ -1277,7 +1338,7 @@ class FengShuiTelegramBot:
         try:
             # Check VIP permissions for gated callback features
             gated_prefixes = ("curr_", "render_", "calc_")
-            gated_exact = {"menu_curriculum", "menu_gua", "menu_flyingstars", "menu_bazi", "menu_predict", "menu_render3d", "menu_ask"}
+            gated_exact = {"menu_curriculum", "menu_gua", "menu_flyingstars", "menu_bazi", "menu_predict", "menu_render3d", "menu_ask", "menu_love"}
             if (data in gated_exact or any(data.startswith(p) for p in gated_prefixes)) and not self._is_vip_or_admin(from_user.id):
                 await self._send_vip_required_notice(query, from_user.id)
                 return
@@ -1291,6 +1352,26 @@ class FengShuiTelegramBot:
                     "សូមជ្រើសរើសមុខងារដែលអ្នកចង់ប្រើប្រាស់៖",
                     reply_markup=self._get_main_keyboard(from_user.id)
                 )
+
+            # Love & Peach Blossom Menu
+            elif data == "menu_love":
+                guide_text = (
+                    "💖 **ក្បួនហុងស៊ុយ និងមហាស្នេហ៍ (Peach Blossom & 8-Pillars Love Zenith)** 💖\n"
+                    "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                    "🌟 **របៀបប្រើប្រាស់ពាក្យបញ្ជាដើម្បីវិភាគក្បួនមហាស្នេហ៍៖**\n\n"
+                    "1️⃣ **វិភាគទាក់ទាញស្នេហាផ្ទាល់ខ្លួន (Peach Blossom Star):**\n"
+                    "`/love <YYYY-MM-DD> <male/female>`\n"
+                    "👉 **ឧទាហរណ៍៖** `/love 1990-05-15 male`\n\n"
+                    "2️⃣ **វិភាគភាពស៊ីចង្វាក់ស្នេហាគូស្នេហ៍ (៨ សសរស្តម្ភ BaZi Compatibility):**\n"
+                    "`/love <ថ្ងៃខែឆ្នាំខ្លួនឯង> <ភេទ> <ថ្ងៃខែឆ្នាំគូស្នេហ៍> <ភេទ>`\n"
+                    "👉 **ឧទាហរណ៍៖** `/love 1990-05-15 male 1992-08-20 female`\n\n"
+                    "*(ប្រព័ន្ធនឹងបង្កើតរបាយការណ៍ Universal Zenith Report រួមមាន៖ ធាតុឱសថព្យាបាលរាសី, យុទ្ធសាស្ត្រអន្ទងចិត្ត, និងវិធីសាស្ត្របន្ទន់ចិត្ត!)*"
+                )
+                keyboard = [
+                    [InlineKeyboardButton("💬 សួរគ្រូហុងស៊ុយ AI", callback_data="menu_ask")],
+                    [InlineKeyboardButton("🏠 ម៉ឺនុយដើម", callback_data="menu_main")]
+                ]
+                await self._safe_edit(query, guide_text, reply_markup=InlineKeyboardMarkup(keyboard))
 
             # VIP Menu
             elif data == "menu_vip":
@@ -1838,6 +1919,8 @@ class FengShuiTelegramBot:
             app.add_handler(CommandHandler("flyingstars", self.flyingstars_command))
             app.add_handler(CommandHandler("bazi", self.bazi_command))
             app.add_handler(CommandHandler("predict", self.predict_command))
+            app.add_handler(CommandHandler("love", self.love_command))
+            app.add_handler(CommandHandler("mahasneh", self.love_command))
             app.add_handler(CommandHandler("ask", self.handle_message))
 
             # Callbacks & Messages

@@ -26,6 +26,10 @@ class HuggingFaceBridge:
         self.token = token or config.HF_TOKEN
         self.model_boramey = config.HF_MODEL_BORAMEY
         self.model_reasoner = config.HF_MODEL_REASONER
+        self.model_mahasneh = config.HF_MODEL_MAHASNEH
+        self.model_llama = config.HF_MODEL_LLAMA
+        self.model_deepseek = config.HF_MODEL_DEEPSEEK_R1
+        self.model_mistral = config.HF_MODEL_MISTRAL
         self.model_embedder = config.HF_MODEL_EMBEDDER
 
         self.client = None
@@ -40,6 +44,19 @@ class HuggingFaceBridge:
         """Check if Hugging Face token is present and client is active."""
         return self.client is not None and bool(self.token)
 
+    def _resolve_model(self, model_type: str) -> str:
+        """Resolve model string based on requested model type."""
+        model_map = {
+            "mahasneh": self.model_mahasneh,
+            "love": self.model_mahasneh,
+            "llama": self.model_llama,
+            "deepseek": self.model_deepseek,
+            "reasoner": self.model_reasoner,
+            "mistral": self.model_mistral,
+            "boramey": self.model_boramey
+        }
+        return model_map.get(model_type.lower(), self.model_boramey)
+
     def generate_chat(
         self,
         system_prompt: str,
@@ -49,10 +66,10 @@ class HuggingFaceBridge:
         temperature: float = 0.7
     ) -> str:
         """
-        Send conversational or reasoning prompt to Hugging Face.
-        model_type: 'boramey' (conversational) or 'reasoner' (deep reasoning)
+        Send conversational, reasoning, or love/romance prompt to Hugging Face model suite.
+        model_type: 'mahasneh', 'boramey', 'reasoner', 'llama', 'deepseek', 'mistral'
         """
-        target_model = self.model_reasoner if model_type == "reasoner" else self.model_boramey
+        target_model = self._resolve_model(model_type)
 
         # If HF client is available, make remote call
         if self.client and self.token:
