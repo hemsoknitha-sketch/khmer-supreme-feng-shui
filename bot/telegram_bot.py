@@ -30,6 +30,7 @@ from engines.alert_predictor import AlertPredictionEngine
 from engines.curriculum_engine import curriculum_engine
 from engines.security_guard import security_guard
 from engines.vision_3d_engine import vision_3d_engine
+from engines.backup_engine import backup_engine
 from database.db_manager import db_manager
 
 logger = logging.getLogger("SupremeFengShui.TelegramBot")
@@ -47,6 +48,7 @@ class FengShuiTelegramBot:
     - High-Precision Classical Calculations (Life Gua, Flying Stars, BaZi, Fortune Alerts)
     - Multimodal Vision Audit & 3D 4K Architectural Generation (Pillar 1 Vision)
     - Enterprise Security Shield (Anti-Spam, Prompt Injection Guard, Secret Redaction)
+    - Automated 24-Hour User Data Protection & Backup Engine (2:00 AM ICT Zip Dispatch)
     """
 
     def __init__(self, token: str = None):
@@ -58,6 +60,7 @@ class FengShuiTelegramBot:
         self.db = db_manager
         self.security = security_guard
         self.vision = vision_3d_engine
+        self.backup = backup_engine
 
     async def _safe_reply(self, message, text: str, reply_markup=None):
         """Safely send markdown text, automatically redacting secrets, falling back to plain text, and guarding max length."""
@@ -188,7 +191,7 @@ class FengShuiTelegramBot:
         return InlineKeyboardMarkup(keyboard)
 
     async def post_init(self, application: Application) -> None:
-        """Register native command menu button in Telegram UI."""
+        """Register native command menu button in Telegram UI and start background schedulers."""
         commands = [
             BotCommand("start", "🌟 ផ្ទាំងដើម & ម៉ឺនុយបញ្ជា (Main Dashboard)"),
             BotCommand("render3d", "🎨 បង្កើតប្លង់ 3D 4K & ពិនិត្យរូបភាព"),
@@ -203,6 +206,7 @@ class FengShuiTelegramBot:
             BotCommand("predict", "📊 ទស្សន៍ទាយសំណាង (ឧ. /predict 1988-05-15)"),
             BotCommand("ask", "🧠 ពិគ្រោះយោបល់ជាមួយ FS-Supreme-Master AI"),
             BotCommand("admin", "🛡️ Super Admin Control Panel"),
+            BotCommand("backup", "📦 Backup ទិន្នន័យ & ផ្ញើ File Zip (Admin)"),
             BotCommand("help", "❓ សៀវភៅណែនាំប្រើប្រាស់")
         ]
         try:
@@ -210,6 +214,9 @@ class FengShuiTelegramBot:
             logger.info("Native Telegram Bot Commands registered successfully.")
         except Exception as e:
             logger.warning(f"Could not register Telegram Bot commands: {e}")
+
+        # Start 24-Hour Automated Backup Scheduler (2:00 AM Phnom Penh ICT)
+        asyncio.create_task(self._start_daily_backup_scheduler(application))
 
     async def start_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /start command with role-based UI and compelling VIP invitation."""
@@ -462,10 +469,11 @@ class FengShuiTelegramBot:
                 InlineKeyboardButton("📊 ស្ថិតិប្រព័ន្ធលម្អិត", callback_data="admin_stats")
             ],
             [
-                InlineKeyboardButton("⚡ សុខភាពម៉ាស៊ីន (Health)", callback_data="menu_health"),
-                InlineKeyboardButton("📢 ផ្ញើសារប្រកាស", callback_data="admin_broadcast_info")
+                InlineKeyboardButton("📦 Backup ទិន្នន័យ (Zip)", callback_data="admin_trigger_backup"),
+                InlineKeyboardButton("⚡ សុខភាពម៉ាស៊ីន (Health)", callback_data="menu_health")
             ],
             [
+                InlineKeyboardButton("📢 ផ្ញើសារប្រកាស (Broadcast)", callback_data="admin_broadcast_info"),
                 InlineKeyboardButton("🏠 ម៉ឺនុយដើម", callback_data="menu_main")
             ]
         ]
@@ -693,6 +701,107 @@ class FengShuiTelegramBot:
                 logger.debug(f"Could not send broadcast to {u['telegram_id']}: {e}")
 
         await self._safe_reply(update.message, f"✅ បានផ្ញើសារប្រកាសជូន {sent_count}/{len(users)} នាក់ដោយជោគជ័យ!")
+
+    async def _start_daily_backup_scheduler(self, application: Application):
+        """
+        Automated background loop: every 24 hours at 2:00 AM Phnom Penh time (ICT GMT+7),
+        creates a compressed zip backup on VPS disk and dispatches it directly to Super Admin.
+        """
+        logger.info("Automated 24-Hour Backup Scheduler initialized (Target: 2:00 AM Phnom Penh ICT).")
+        while True:
+            try:
+                secs_until_2am = self.backup.get_seconds_until_next_2am_ict()
+                hours = round(secs_until_2am / 3600, 2)
+                logger.info(f"Next automated 2:00 AM backup in {secs_until_2am:.0f} seconds (~{hours} hours).")
+
+                # Sleep until 2:00 AM ICT
+                await asyncio.sleep(secs_until_2am)
+
+                # Perform online atomic backup
+                logger.info("2:00 AM Phnom Penh ICT reached! Executing automated daily backup...")
+                res = self.backup.create_backup(trigger_type="Automated 24-Hour Daily Backup (2:00 AM ICT)")
+
+                if res["success"]:
+                    await self._dispatch_backup_to_admins(application.bot, res, is_automated=True)
+                else:
+                    logger.error(f"Automated daily backup failed: {res.get('error')}")
+
+                # Brief pause before next cycle calculation
+                await asyncio.sleep(60)
+
+            except Exception as e:
+                logger.error(f"Error in automated backup scheduler loop: {e}", exc_info=True)
+                await asyncio.sleep(300)
+
+    async def _dispatch_backup_to_admins(self, bot, backup_res: Dict[str, Any], is_automated: bool = True):
+        """Send backup zip document with rich telemetry caption directly to Super Admins."""
+        admin_ids = config.ADMIN_USER_IDS
+        if not admin_ids:
+            return
+
+        stats = backup_res["stats"]
+        header = (
+            "📦 **សេចក្តីរាយការណ៍៖ ទិន្នន័យ BACKUP ប្រចាំថ្ងៃស្វ័យប្រវត្តិកំពូល (2:00 AM ICT)** 📦\n"
+            if is_automated else
+            "📦 **សេចក្តីរាយការណ៍៖ ទិន្នន័យ BACKUP (MANUAL ON-DEMAND)** 📦\n"
+        )
+
+        caption = (
+            f"{header}"
+            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            f"🌟 **ប្រព័ន្ធ SUPREME FENG SHUI AGI (Master Level v1.0.0)**\n\n"
+            f"📁 **ឈ្មោះឯកសារ:** `{backup_res['file_name']}`\n"
+            f"⏱️ **កាលបរិច្ឆេទ:** `{backup_res['timestamp_ict']}`\n"
+            f"💾 **ទំហំឯកសារ:** `{backup_res['file_size_kb']} KB` (Zip Deflated)\n"
+            f"🔐 **SHA-256 Checksum:** `{backup_res['sha256'][:16]}...` (100% Clean)\n\n"
+            f"📊 **ស្ថិតិទិន្នន័យដែលបានរក្សាទុកក្នុង VPS Disk:**\n"
+            f"• 👥 **អ្នកប្រើប្រាស់សរុប:** `{stats['total_users']}` នាក់\n"
+            f"• 👑 **សមាជិក VIP សរុប:** `{stats['total_vips']}` នាក់\n"
+            f"  - 🌟 VIP 1 ខែ: `{stats['vip_monthly']}` នាក់\n"
+            f"  - 👑 VIP 1 ឆ្នាំ: `{stats['vip_yearly']}` នាក់\n"
+            f"  - 💎 VIP មួយជីវិត: `{stats['vip_lifetime']}` នាក់\n"
+            f"• 🔑 **អាជ្ញាប័ណ្ណសរុប:** `{stats['total_licenses']}` (មិនទាន់ប្រើ: `{stats['active_licenses']}`)\n"
+            f"• 💬 **សំណួរសរុបក្នុងប្រព័ន្ធ:** `{stats['total_queries']}` ដង\n\n"
+            f"🟢 **ស្ថានភាពរក្សាទុក:** បានរក្សាទុកក្នុង VPS Disk (`/data/backups/`) និងរក្សាទុក 30 ថ្ងៃចុងក្រោយដោយសុវត្ថិភាពខ្ពស់បំផុត!"
+        )
+
+        for admin_id in admin_ids:
+            try:
+                with open(backup_res["zip_path"], "rb") as f:
+                    await bot.send_document(
+                        chat_id=admin_id,
+                        document=f,
+                        filename=backup_res["file_name"],
+                        caption=caption,
+                        parse_mode="Markdown"
+                    )
+                logger.info(f"Backup zip successfully dispatched to Super Admin {admin_id}")
+            except Exception as e:
+                logger.error(f"Could not send backup zip to Admin {admin_id}: {e}", exc_info=True)
+
+    async def backup_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Handle /backup command to trigger manual instant backup and receive zip file (Admin Only)."""
+        from_user = update.effective_user
+        admin = self.db.get_or_create_user(from_user.id)
+        if admin.get("role") != "super_admin" and from_user.id not in config.ADMIN_USER_IDS:
+            await self._safe_reply(update.message, "⛔ Access Denied. Command reserved for Super Admin.")
+            return
+
+        status_msg = await self._safe_reply(
+            update.message,
+            "⏳ **កំពុងដំណើរការបង្កើត Data Backup និង Zip File...**\n*(សូមរង់ចាំប្រហែល ១-២ វិនាទី)*"
+        )
+
+        res = self.backup.create_backup(trigger_type=f"Manual On-Demand (Admin {from_user.id})")
+        if res["success"]:
+            await self._dispatch_backup_to_admins(context.bot, res, is_automated=False)
+            if status_msg:
+                try:
+                    await status_msg.delete()
+                except Exception:
+                    pass
+        else:
+            await self._safe_reply(update.message, f"❌ កំហុសក្នុងការបង្កើត Backup៖ {res.get('error')}")
 
     # ==================== GENERAL USER COMMANDS ====================
 
@@ -1392,6 +1501,35 @@ class FengShuiTelegramBot:
                 ]
                 await self._safe_edit(query, text, reply_markup=InlineKeyboardMarkup(keyboard))
 
+            elif data == "admin_trigger_backup":
+                admin = self.db.get_or_create_user(from_user.id)
+                if admin.get("role") != "super_admin" and from_user.id not in config.ADMIN_USER_IDS:
+                    await self._safe_edit(query, "⛔ Access Denied.")
+                    return
+
+                await self._safe_edit(query, "⏳ **កំពុងដំណើរការ Backup ទិន្នន័យ និងបង្ហាប់ File Zip...**\n*(សូមរង់ចាំបន្តិច)*")
+                res = self.backup.create_backup(trigger_type=f"Manual Button Trigger (Admin {from_user.id})")
+                if res["success"]:
+                    bot_instance = query.bot if hasattr(query, "bot") else query.message.get_bot()
+                    await self._dispatch_backup_to_admins(bot_instance, res, is_automated=False)
+                    text = (
+                        f"✅ **បានបង្កើត និងផ្ញើឯកសារ Zip Backup ជូនលោកមេការជោគជ័យ!**\n"
+                        f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                        f"📁 **ឈ្មោះ:** `{res['file_name']}`\n"
+                        f"💾 **ទំហំ:** `{res['file_size_kb']} KB`\n"
+                        f"⏱️ **ពេលវេលា:** `{res['timestamp_ict']}`\n"
+                        f"🔐 **SHA-256 Checksum:** `{res['sha256'][:16]}...`\n\n"
+                        f"*(ប្រព័ន្ធក៏នឹងបន្តផ្ញើ Backup ស្វ័យប្រវត្តិកំពូលរៀងរាល់ ២៤ ម៉ោង វេលាម៉ោង ២:០០ ទៀបភ្លឺជារៀងរាល់ថ្ងៃ)*"
+                    )
+                else:
+                    text = f"❌ កំហុសក្នុងការបង្កើត Backup៖ {res.get('error')}"
+
+                keyboard = [
+                    [InlineKeyboardButton("🔙 ត្រឡប់ទៅ Admin Panel", callback_data="admin_panel")],
+                    [InlineKeyboardButton("🏠 ម៉ឺនុយដើម", callback_data="menu_main")]
+                ]
+                await self._safe_edit(query, text, reply_markup=InlineKeyboardMarkup(keyboard))
+
             # ==================== CURRICULUM CALLBACKS ====================
             elif data == "menu_curriculum":
                 cats = self.curriculum.get_categories()
@@ -1689,6 +1827,7 @@ class FengShuiTelegramBot:
             app.add_handler(CommandHandler("vip", self.vip_command))
             app.add_handler(CommandHandler("redeem", self.redeem_command))
             app.add_handler(CommandHandler("admin", self.admin_command))
+            app.add_handler(CommandHandler("backup", self.backup_command))
             app.add_handler(CommandHandler("setvip", self.setvip_command))
             app.add_handler(CommandHandler("genkeys", self.genkeys_command))
             app.add_handler(CommandHandler("broadcast", self.broadcast_command))
