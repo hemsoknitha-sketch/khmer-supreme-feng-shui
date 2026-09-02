@@ -409,3 +409,93 @@ def get_3d_render_spec(space_type: str = "living_room", style: str = "modern_lux
     res = vision_3d_engine.generate_3d_render_prompt(space_type=space_type, style=style)
     return {"success": True, "data": res}
 
+
+# =============================================================================
+# Pillar 9: Celestial Scheduler & Personalized Astrology Endpoints
+# =============================================================================
+class CelestialDailyRequest(BaseModel):
+    birth_date: str = Field(..., example="1990-05-15")
+    birth_time: str = Field(default="12:00", example="08:30")
+    gender: str = Field(default="male", example="male")
+    target_date: Optional[str] = Field(default=None, example="2026-09-02")
+
+
+class CelestialMonthlyRequest(BaseModel):
+    birth_date: str = Field(..., example="1990-05-15")
+    birth_time: str = Field(default="12:00", example="08:30")
+    gender: str = Field(default="male", example="male")
+    year: Optional[int] = Field(default=None, example=2026)
+    month: Optional[int] = Field(default=None, example=9)
+
+
+class CelestialYearlyRequest(BaseModel):
+    birth_date: str = Field(..., example="1990-05-15")
+    birth_time: str = Field(default="12:00", example="08:30")
+    gender: str = Field(default="male", example="male")
+    year: Optional[int] = Field(default=None, example=2026)
+
+
+@app.post("/api/celestial/daily")
+def get_celestial_daily_report(req: CelestialDailyRequest):
+    """Generate comprehensive personalized 24-hour daily celestial report."""
+    from engines.celestial_astrology_engine import CelestialAstrologyEngine
+    engine = CelestialAstrologyEngine()
+    target_dt = None
+    if req.target_date:
+        try:
+            target_dt = datetime.strptime(req.target_date, "%Y-%m-%d").date()
+        except Exception:
+            pass
+    report = engine.generate_daily_celestial_report(
+        birth_date=req.birth_date,
+        birth_time=req.birth_time,
+        gender=req.gender,
+        target_date=target_dt
+    )
+    bazi = engine.calculate_precision_bazi(req.birth_date, req.birth_time, req.gender)
+    almanac = engine.calculate_global_almanac(target_dt)
+    return {
+        "success": True,
+        "report": report,
+        "precision_bazi": bazi,
+        "global_almanac": almanac
+    }
+
+
+@app.post("/api/celestial/monthly")
+def get_celestial_monthly_report(req: CelestialMonthlyRequest):
+    """Generate monthly celestial blueprint."""
+    from engines.celestial_astrology_engine import CelestialAstrologyEngine
+    engine = CelestialAstrologyEngine()
+    report = engine.generate_monthly_celestial_report(
+        birth_date=req.birth_date,
+        birth_time=req.birth_time,
+        gender=req.gender,
+        year=req.year,
+        month=req.month
+    )
+    return {"success": True, "report": report}
+
+
+@app.post("/api/celestial/yearly")
+def get_celestial_yearly_report(req: CelestialYearlyRequest):
+    """Generate grand annual celestial horoscope."""
+    from engines.celestial_astrology_engine import CelestialAstrologyEngine
+    engine = CelestialAstrologyEngine()
+    report = engine.generate_yearly_celestial_report(
+        birth_date=req.birth_date,
+        birth_time=req.birth_time,
+        gender=req.gender,
+        year=req.year
+    )
+    return {"success": True, "report": report}
+
+
+@app.get("/api/celestial/almanac")
+def get_daily_almanac():
+    """Retrieve today's Chinese Tung Shu and Khmer Traditional Almanac."""
+    from engines.celestial_astrology_engine import CelestialAstrologyEngine
+    engine = CelestialAstrologyEngine()
+    almanac = engine.calculate_global_almanac()
+    return {"success": True, "almanac": almanac}
+

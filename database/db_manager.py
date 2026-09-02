@@ -94,6 +94,17 @@ class DatabaseManager:
                 );
                 """)
 
+                # Migrations: Ensure birth_date, birth_time, gender columns exist
+                for col_def in [
+                    ("birth_date", "TEXT"),
+                    ("birth_time", "TEXT DEFAULT '12:00'"),
+                    ("gender", "TEXT DEFAULT 'male'")
+                ]:
+                    try:
+                        cursor.execute(f"ALTER TABLE users ADD COLUMN {col_def[0]} {col_def[1]};")
+                    except Exception:
+                        pass
+
                 # Indexes
                 cursor.execute("CREATE INDEX IF NOT EXISTS idx_users_role ON users(role);")
                 cursor.execute("CREATE INDEX IF NOT EXISTS idx_users_vip_expiry ON users(vip_expiry);")
@@ -488,9 +499,36 @@ class DatabaseManager:
         with get_db_connection() as conn:
             cursor = conn.cursor()
             cursor.execute("""
-                SELECT telegram_id, username, full_name, role, vip_tier, vip_expiry, total_queries, created_at
+                SELECT telegram_id, username, full_name, role, vip_tier, vip_expiry, total_queries, created_at, birth_date, birth_time, gender
                 FROM users ORDER BY updated_at DESC LIMIT ?
             """, (limit,))
+            return [dict(row) for row in cursor.fetchall()]
+
+    def set_user_birth_profile(self, telegram_id: int, birth_date: str, birth_time: str = "12:00", gender: str = "male") -> bool:
+        """Save or update user's birth profile for Celestial Astrology."""
+        now = datetime.utcnow().isoformat()
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                UPDATE users
+                SET birth_date = ?, birth_time = ?, gender = ?, updated_at = ?
+                WHERE telegram_id = ?;
+            """, (birth_date.strip(), birth_time.strip(), gender.strip().lower(), now, telegram_id))
+            conn.commit()
+            return cursor.rowcount > 0
+
+    def get_active_vip_users_with_birth_profiles(self) -> List[Dict[str, Any]]:
+        """Fetch all active VIP users and admins with their birth profiles."""
+        now = datetime.utcnow().isoformat()
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT telegram_id, username, full_name, role, vip_tier, vip_expiry, birth_date, birth_time, gender
+                FROM users
+                WHERE (role IN ('super_admin', 'vip_monthly', 'vip_yearly', 'vip_lifetime')
+                   OR vip_tier IN ('admin', 'monthly', 'yearly', 'lifetime')
+                   OR (vip_expiry IS NOT NULL AND vip_expiry > ?));
+            """, (now,))
             return [dict(row) for row in cursor.fetchall()]
 
 

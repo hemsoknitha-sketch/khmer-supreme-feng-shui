@@ -19,6 +19,7 @@ from engines.rag_client import RAGKnowledgeRetriever
 from engines.alert_predictor import AlertPredictionEngine
 from engines.chronos_cycle import ChronosCycleEngine
 from engines.mahasneh_love_engine import mahasneh_love_engine
+from engines.celestial_astrology_engine import CelestialAstrologyEngine
 
 logger = logging.getLogger("SupremeFengShui.Master")
 
@@ -35,6 +36,7 @@ class SupremeFengShuiMaster:
         self.alert_predictor = AlertPredictionEngine()
         self.chronos_engine = ChronosCycleEngine()
         self.love_engine = mahasneh_love_engine
+        self.celestial_engine = CelestialAstrologyEngine()
         logger.info("All 4 Engine Groups & Omni AI Mesh successfully linked to Master Orchestrator.")
 
     def consult(

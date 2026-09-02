@@ -32,6 +32,7 @@ from engines.security_guard import security_guard
 from engines.vision_3d_engine import vision_3d_engine
 from engines.backup_engine import backup_engine
 from engines.mahasneh_love_engine import mahasneh_love_engine
+from engines.celestial_astrology_engine import CelestialAstrologyEngine
 from database.db_manager import db_manager
 
 logger = logging.getLogger("SupremeFengShui.TelegramBot")
@@ -51,6 +52,7 @@ class FengShuiTelegramBot:
     - Enterprise Security Shield (Anti-Spam, Prompt Injection Guard, Secret Redaction)
     - Automated 24-Hour User Data Protection & Backup Engine (2:00 AM ICT Zip Dispatch)
     - "ក្បួនហុងស៊ុយ និងមហាស្នេហ៍" (Maha Sneh, Peach Blossom & BaZi 8-Pillars Love Match)
+    - Pillar 9: Celestial Scheduler & Personalized Astrology Engine (Daily 5:00 AM Alerts)
     """
 
     def __init__(self, token: str = None):
@@ -64,6 +66,7 @@ class FengShuiTelegramBot:
         self.vision = vision_3d_engine
         self.backup = backup_engine
         self.love = mahasneh_love_engine
+        self.celestial = CelestialAstrologyEngine()
 
     async def _safe_reply(self, message, text: str, reply_markup=None):
         """Safely send markdown text, automatically redacting secrets, falling back to plain text, and guarding max length."""
@@ -171,15 +174,18 @@ class FengShuiTelegramBot:
                     InlineKeyboardButton("📊 ទស្សន៍ទាយសំណាង", callback_data="menu_predict")
                 ],
                 [
-                    InlineKeyboardButton("💖 ហុងស៊ុយ & មហាស្នេហ៍", callback_data="menu_love"),
-                    InlineKeyboardButton("🎨 បង្កើតប្លង់ 3D 4K", callback_data="menu_render3d")
+                    InlineKeyboardButton("🌌 ហោរាសាស្ត្រ & ហុងស៊ុយ", callback_data="menu_celestial"),
+                    InlineKeyboardButton("💖 ហុងស៊ុយ & មហាស្នេហ៍", callback_data="menu_love")
                 ],
                 [
-                    InlineKeyboardButton("💬 សួរគ្រូហុងស៊ុយ AI", callback_data="menu_ask"),
-                    InlineKeyboardButton("👑 ស្ថានភាព VIP របស់ខ្ញុំ", callback_data="menu_vip")
+                    InlineKeyboardButton("🎨 បង្កើតប្លង់ 3D 4K", callback_data="menu_render3d"),
+                    InlineKeyboardButton("💬 សួរគ្រូហុងស៊ុយ AI", callback_data="menu_ask")
                 ],
                 [
-                    InlineKeyboardButton("⚡ ស្ថានភាពប្រព័ន្ធ", callback_data="menu_health"),
+                    InlineKeyboardButton("👑 ស្ថានភាព VIP របស់ខ្ញុំ", callback_data="menu_vip"),
+                    InlineKeyboardButton("⚡ ស្ថានភាពប្រព័ន្ធ", callback_data="menu_health")
+                ],
+                [
                     InlineKeyboardButton("❓ ជំនួយ (Help)", callback_data="menu_help")
                 ]
             ]
@@ -203,6 +209,11 @@ class FengShuiTelegramBot:
         """Register native command menu button in Telegram UI and start background schedulers."""
         commands = [
             BotCommand("start", "🌟 ផ្ទាំងដើម & ម៉ឺនុយបញ្ជា (Main Dashboard)"),
+            BotCommand("daily", "🌅 ហោរាសាស្ត្រ & ហុងស៊ុយប្រចាំថ្ងៃ (Daily)"),
+            BotCommand("monthly", "📅 ផែនទីរាសីប្រចាំខែថ្មី (Monthly)"),
+            BotCommand("yearly", "🎊 មហាសង្ក្រាន្ត & រាសីប្រចាំឆ្នាំ (Yearly)"),
+            BotCommand("almanac", "📜 ក្បួនតម្រាខ្មែរ & Tung Shu ប្រចាំថ្ងៃ"),
+            BotCommand("setbirth", "⚙️ កំណត់ម៉ោង & ថ្ងៃខែឆ្នាំកំណើត"),
             BotCommand("love", "💖 ហុងស៊ុយ & មហាស្នេហ៍ (Peach Blossom)"),
             BotCommand("render3d", "🎨 បង្កើតប្លង់ 3D 4K & ពិនិត្យរូបភាព"),
             BotCommand("health", "⚡ ត្រួតពិនិត្យសុខភាព VPS, CPU, RAM, Disk, AI"),
@@ -227,6 +238,9 @@ class FengShuiTelegramBot:
 
         # Start 24-Hour Automated Backup Scheduler (2:00 AM Phnom Penh ICT)
         asyncio.create_task(self._start_daily_backup_scheduler(application))
+
+        # Start Pillar 9 Automated Celestial Alert Scheduler (5:00 AM Phnom Penh ICT)
+        asyncio.create_task(self._start_celestial_alert_scheduler(application))
 
     async def start_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /start command with role-based UI and compelling VIP invitation."""
@@ -863,6 +877,140 @@ class FengShuiTelegramBot:
             except Exception as e:
                 logger.error(f"Could not send backup zip to Admin {admin_id}: {e}", exc_info=True)
 
+    # ==================== PILLAR 9 CELESTIAL SCHEDULER & ALERTS ====================
+
+    async def _start_celestial_alert_scheduler(self, application: Application):
+        """
+        Background Task: Automated Daily 5:00 AM ICT Celestial Astrology & Almanac Dispatcher.
+        Dispatches personalized daily horoscope at 5:00 AM ICT every day, monthly blueprint
+        on the 1st of every month, and yearly blueprint on New Year / Li Chun.
+        """
+        logger.info("Celestial 5:00 AM ICT daily/monthly alert background scheduler started successfully.")
+        while True:
+            try:
+                # Calculate seconds until next 5:00 AM Phnom Penh Time (ICT / UTC+7)
+                now_utc = datetime.now(timezone.utc)
+                now_ict = now_utc.astimezone(timezone(timedelta(hours=7)))
+
+                # Target time: Today at 05:00:00 ICT
+                target_ict = now_ict.replace(hour=5, minute=0, second=0, microsecond=0)
+                if now_ict >= target_ict:
+                    # If already past 5:00 AM today, schedule for tomorrow 5:00 AM
+                    target_ict += timedelta(days=1)
+
+                wait_seconds = (target_ict - now_ict).total_seconds()
+                logger.info(f"Celestial Scheduler sleeping for {wait_seconds / 3600:.2f} hours until next 5:00 AM ICT ({target_ict.strftime('%Y-%m-%d %H:%M:%S')})...")
+                await asyncio.sleep(wait_seconds)
+
+                # Trigger Celestial Alert Dispatch
+                await self._dispatch_celestial_alerts(application)
+
+                # Sleep 60 seconds to avoid duplicate firing in the same minute
+                await asyncio.sleep(60)
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                logger.error(f"Error in Celestial alert scheduler: {e}", exc_info=True)
+                await asyncio.sleep(300)
+
+    async def _dispatch_celestial_alerts(self, application: Application):
+        """Dispatch daily 5:00 AM horoscope, monthly blueprint on 1st of month, and new year horoscope."""
+        logger.info("Executing automated Celestial alert dispatch for VIP users and Admins at 5:00 AM ICT...")
+        users = self.db.get_active_vip_users_with_birth_profiles()
+        now_ict = datetime.now(timezone.utc).astimezone(timezone(timedelta(hours=7)))
+
+        is_first_of_month = (now_ict.day == 1)
+        is_new_year = (now_ict.month == 1 and now_ict.day == 1) or (now_ict.month == 2 and now_ict.day == 4)
+
+        sent_count = 0
+        for u in users:
+            tid = u["telegram_id"]
+            b_date = u.get("birth_date") or "1990-05-15"
+            b_time = u.get("birth_time") or "12:00"
+            gender = u.get("gender") or "male"
+
+            # 1. Daily Celestial Report
+            daily_msg = self.celestial.generate_daily_celestial_report(
+                birth_date=b_date,
+                birth_time=b_time,
+                gender=gender,
+                target_date=now_ict.date()
+            )
+            keyboard = [
+                [InlineKeyboardButton("📜 មើលក្បួនតម្រា Tung Shu & ខ្មែរ", callback_data="cel_almanac")],
+                [
+                    InlineKeyboardButton("⚙️ កែសម្រួលម៉ោងកំណើត", callback_data="cel_setbirth_prompt"),
+                    InlineKeyboardButton("🏠 ម៉ឺនុយដើម", callback_data="menu_main")
+                ]
+            ]
+            try:
+                await application.bot.send_message(
+                    chat_id=tid,
+                    text=daily_msg,
+                    parse_mode="Markdown",
+                    reply_markup=InlineKeyboardMarkup(keyboard)
+                )
+                sent_count += 1
+            except Exception as e:
+                logger.warning(f"Failed to dispatch daily celestial alert to {tid}: {e}")
+
+            # 2. Monthly Grand Celestial Blueprint (1st of month)
+            if is_first_of_month:
+                monthly_msg = self.celestial.generate_monthly_celestial_report(
+                    birth_date=b_date,
+                    birth_time=b_time,
+                    gender=gender,
+                    year=now_ict.year,
+                    month=now_ict.month
+                )
+                try:
+                    await application.bot.send_message(
+                        chat_id=tid,
+                        text=monthly_msg,
+                        parse_mode="Markdown"
+                    )
+                except Exception:
+                    pass
+
+            # 3. Grand Annual Celestial Horoscope (New Year / Li Chun)
+            if is_new_year:
+                yearly_msg = self.celestial.generate_yearly_celestial_report(
+                    birth_date=b_date,
+                    birth_time=b_time,
+                    gender=gender,
+                    year=now_ict.year
+                )
+                try:
+                    await application.bot.send_message(
+                        chat_id=tid,
+                        text=yearly_msg,
+                        parse_mode="Markdown"
+                    )
+                except Exception:
+                    pass
+
+        # Dispatch completion summary to Super Admin
+        admin_ids = config.ADMIN_USER_IDS
+        summary = (
+            "🌅 **របាយការណ៍បញ្ជូនហោរាសាស្ត្រ & ហុងស៊ុយប្រចាំថ្ងៃ (CELESTIAL DISPATCH REPORT)** 🌅\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            f"• **ពេលវេលា:** `{now_ict.strftime('%Y-%m-%d %H:%M:%S ICT')}`\n"
+            f"• **ចំនួន VIP បានទទួលជោគជ័យ:** `{sent_count}` នាក់\n"
+            f"• **របាយការណ៍ខែថ្មី (1st of Month):** `{'✅ បានផ្ញើ' if is_first_of_month else '❌ មិនមែនថ្ងៃទី១'}`\n"
+            f"• **របាយការណ៍ចូលឆ្នាំថ្មី (New Year):** `{'✅ បានផ្ញើ' if is_new_year else '❌ មិនមែនថ្ងៃចូលឆ្នាំ'}`\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "✅ ប្រព័ន្ធដំណើរការពេញលេញ ២៤/៧!"
+        )
+        for adm in admin_ids:
+            try:
+                await application.bot.send_message(
+                    chat_id=adm,
+                    text=summary,
+                    parse_mode="Markdown"
+                )
+            except Exception:
+                pass
+
     async def backup_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /backup command to trigger manual instant backup and receive zip file (Admin Only)."""
         from_user = update.effective_user
@@ -1419,6 +1567,211 @@ class FengShuiTelegramBot:
         else:
             await self._safe_reply(message_or_query, text, reply_markup=InlineKeyboardMarkup(keyboard))
 
+    # ==================== PILLAR 9 CELESTIAL USER COMMANDS ====================
+
+    async def celestial_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Handle /celestial or main celestial menu."""
+        from_user = update.effective_user
+        if not self._is_vip_or_admin(from_user.id):
+            await self._send_vip_required_notice(update.message, from_user.id)
+            return
+        await self._send_celestial_menu(update.message, is_edit=False)
+
+    async def _send_celestial_menu(self, message_or_query, is_edit: bool = False):
+        """Render Celestial Scheduler & Astrology Dashboard Menu."""
+        text = (
+            "🌌 **ហោរាសាស្ត្រ & ហុងស៊ុយ (CELESTIAL SCHEDULER & ASTROLOGY) - PILLAR 9** 🌌\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "បច្ចេកវិទ្យាបញ្ញាសិប្បនិម្មិតកម្រិត AGI រួមបញ្ចូល ម៉ោង ថ្ងៃ ខែ ឆ្នាំកំណើត (BaZi Four Pillars 8 Characters) "
+            "ជាមួយក្បួនចិនសកល (Tung Shu) និងក្បួនតម្រាខ្មែរបុរាណ!\n\n"
+            "👇 **សូមជ្រើសរើសមុខងារដែលអ្នកចង់ពិនិត្យមើល៖**"
+        )
+        keyboard = [
+            [
+                InlineKeyboardButton("🌅 ហោរាសាស្ត្រ & រាសីប្រចាំថ្ងៃ (Daily 24H)", callback_data="cel_daily"),
+                InlineKeyboardButton("📅 ផែនទីរាសីប្រចាំខែ (Monthly)", callback_data="cel_monthly")
+            ],
+            [
+                InlineKeyboardButton("🎊 ជោគជតារាសីប្រចាំឆ្នាំ (Yearly)", callback_data="cel_yearly"),
+                InlineKeyboardButton("📜 ក្បួនតម្រាខ្មែរ & Tung Shu", callback_data="cel_almanac")
+            ],
+            [
+                InlineKeyboardButton("⚙️ កំណត់ម៉ោង & ថ្ងៃខែឆ្នាំកំណើត", callback_data="cel_setbirth_prompt")
+            ],
+            [
+                InlineKeyboardButton("🏠 ម៉ឺនុយដើម", callback_data="menu_main")
+            ]
+        ]
+        if is_edit:
+            await self._safe_edit(message_or_query, text, reply_markup=InlineKeyboardMarkup(keyboard))
+        else:
+            await self._safe_reply(message_or_query, text, reply_markup=InlineKeyboardMarkup(keyboard))
+
+    async def setbirth_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Handle /setbirth <YYYY-MM-DD> [HH:MM] [male/female]."""
+        from_user = update.effective_user
+        if not self._is_vip_or_admin(from_user.id):
+            await self._send_vip_required_notice(update.message, from_user.id)
+            return
+
+        args = context.args
+        if not args or len(args) < 1:
+            guide = (
+                "⚙️ **របៀបកំណត់ម៉ោង & ថ្ងៃខែឆ្នាំកំណើតផ្ទាល់ខ្លួន៖**\n"
+                "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                "សូមសរសេរ៖ `/setbirth <YYYY-MM-DD> [HH:MM] [male/female]`\n\n"
+                "👉 **ឧទាហរណ៍ជាក់ស្តែង៖**\n"
+                "• `/setbirth 1990-05-15 08:30 male`\n"
+                "• `/setbirth 1992-08-20 14:00 female`\n\n"
+                "*(ព័ត៌មាននេះនឹងត្រូវបានរក្សាទុកដើម្បីគណនា និងផ្ញើសារ Alert រាសីប្រចាំថ្ងៃម៉ោង ៥ ព្រឹកស្វ័យប្រវត្តិកំពូល!)*"
+            )
+            await self._safe_reply(update.message, guide)
+            return
+
+        b_date = args[0]
+        b_time = args[1] if len(args) > 1 else "12:00"
+        gender = args[2].lower() if len(args) > 2 else "male"
+
+        success = self.db.set_user_birth_profile(from_user.id, b_date, b_time, gender)
+        if success:
+            p_bazi = self.celestial.calculate_precision_bazi(b_date, b_time, gender)
+            dm = p_bazi.get("day_master", {})
+            resp_msg = (
+                "✅ **បានកត់ត្រាព័ត៌មានជោគជតាដោយជោគជ័យ!**\n"
+                "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                f"👤 **ម្ចាស់ជោគជតា:** `{from_user.full_name}`\n"
+                f"📅 **ថ្ងៃខែឆ្នាំកំណើត:** `{b_date}` | ម៉ោង: `{b_time}`\n"
+                f"⚧️ **ភេទ:** `{'បុរស (Male)' if gender == 'male' else 'ស្ត្រី (Female)'}`\n"
+                f"👑 **Day Master (ធាតុខ្លួនឯង):** **{dm.get('element_kh', '')}**\n"
+                f"💊 **ធាតុឱសថគាំទ្រ (Useful God):** {p_bazi.get('useful_god', '')}\n\n"
+                "🌅 *ប្រព័ន្ធនឹងផ្ញើសេចក្តីជូនដំណឹងរាសីប្រចាំថ្ងៃជូនលោកអ្នករៀងរាល់ម៉ោង ៥:០០ ព្រឹកស្វ័យប្រវត្តិ!*"
+            )
+            keyboard = [
+                [InlineKeyboardButton("🌅 មើលរាសីថ្ងៃនេះភ្លាមៗ", callback_data="cel_daily")],
+                [InlineKeyboardButton("🏠 ម៉ឺនុយដើម", callback_data="menu_main")]
+            ]
+            await self._safe_reply(update.message, resp_msg, reply_markup=InlineKeyboardMarkup(keyboard))
+        else:
+            await self._safe_reply(update.message, "❌ មិនអាចរក្សាទុកព័ត៌មានបានទេ។ សូមព្យាយាមម្តងទៀត។")
+
+    async def daily_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Handle /daily or /horoscope command."""
+        from_user = update.effective_user
+        if not self._is_vip_or_admin(from_user.id):
+            await self._send_vip_required_notice(update.message, from_user.id)
+            return
+
+        user = self.db.get_or_create_user(from_user.id)
+        b_date = user.get("birth_date") or "1990-05-15"
+        b_time = user.get("birth_time") or "12:00"
+        gender = user.get("gender") or "male"
+
+        report = self.celestial.generate_daily_celestial_report(b_date, b_time, gender)
+        keyboard = [
+            [
+                InlineKeyboardButton("📜 ក្បួនតម្រា Tung Shu & ខ្មែរ", callback_data="cel_almanac"),
+                InlineKeyboardButton("📅 រាសីប្រចាំខែ", callback_data="cel_monthly")
+            ],
+            [
+                InlineKeyboardButton("⚙️ កែប្រែម៉ោងកំណើត", callback_data="cel_setbirth_prompt"),
+                InlineKeyboardButton("🏠 ម៉ឺនុយដើម", callback_data="menu_main")
+            ]
+        ]
+        await self._safe_reply(update.message, report, reply_markup=InlineKeyboardMarkup(keyboard))
+        asyncio.create_task(self._notify_admin_qa_interaction(
+            context, from_user, f"/daily (Birth: {b_date} {b_time})", report, service_type="🌅 ហោរាសាស្ត្រប្រចាំថ្ងៃ (Daily)"
+        ))
+
+    async def monthly_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Handle /monthly command."""
+        from_user = update.effective_user
+        if not self._is_vip_or_admin(from_user.id):
+            await self._send_vip_required_notice(update.message, from_user.id)
+            return
+
+        user = self.db.get_or_create_user(from_user.id)
+        b_date = user.get("birth_date") or "1990-05-15"
+        b_time = user.get("birth_time") or "12:00"
+        gender = user.get("gender") or "male"
+
+        report = self.celestial.generate_monthly_celestial_report(b_date, b_time, gender)
+        keyboard = [
+            [
+                InlineKeyboardButton("🌅 រាសីប្រចាំថ្ងៃ (24H)", callback_data="cel_daily"),
+                InlineKeyboardButton("🎊 រាសីប្រចាំឆ្នាំ", callback_data="cel_yearly")
+            ],
+            [InlineKeyboardButton("🏠 ម៉ឺនុយដើម", callback_data="menu_main")]
+        ]
+        await self._safe_reply(update.message, report, reply_markup=InlineKeyboardMarkup(keyboard))
+        asyncio.create_task(self._notify_admin_qa_interaction(
+            context, from_user, f"/monthly (Birth: {b_date} {b_time})", report, service_type="📅 ផែនទីរាសីប្រចាំខែ (Monthly)"
+        ))
+
+    async def yearly_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Handle /yearly command."""
+        from_user = update.effective_user
+        if not self._is_vip_or_admin(from_user.id):
+            await self._send_vip_required_notice(update.message, from_user.id)
+            return
+
+        user = self.db.get_or_create_user(from_user.id)
+        b_date = user.get("birth_date") or "1990-05-15"
+        b_time = user.get("birth_time") or "12:00"
+        gender = user.get("gender") or "male"
+
+        report = self.celestial.generate_yearly_celestial_report(b_date, b_time, gender)
+        keyboard = [
+            [
+                InlineKeyboardButton("🌅 រាសីប្រចាំថ្ងៃ (24H)", callback_data="cel_daily"),
+                InlineKeyboardButton("📅 រាសីប្រចាំខែ", callback_data="cel_monthly")
+            ],
+            [InlineKeyboardButton("🏠 ម៉ឺនុយដើម", callback_data="menu_main")]
+        ]
+        await self._safe_reply(update.message, report, reply_markup=InlineKeyboardMarkup(keyboard))
+        asyncio.create_task(self._notify_admin_qa_interaction(
+            context, from_user, f"/yearly (Birth: {b_date} {b_time})", report, service_type="🎊 មហាសង្ក្រាន្តប្រចាំឆ្នាំ (Yearly)"
+        ))
+
+    async def almanac_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Handle /almanac or /tungshu command."""
+        from_user = update.effective_user
+        if not self._is_vip_or_admin(from_user.id):
+            await self._send_vip_required_notice(update.message, from_user.id)
+            return
+
+        almanac = self.celestial.calculate_global_almanac()
+        officer = almanac["day_officer"]
+        khmer = almanac["khmer_almanac"]
+        dirs = almanac["auspicious_directions"]
+
+        msg = (
+            "📜 **ក្បួនតម្រាខ្មែរ & ចិនសកលប្រចាំថ្ងៃ (DAILY GLOBAL ALMANAC)** 📜\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            f"📅 **កាលបរិច្ឆេទ:** `{almanac['date']}` ({almanac['day_name_kh']})\n"
+            f"🏛️ **សសរស្តម្ភថ្ងៃ:** `{almanac['day_ganzhi']}` (ឆ្នាំ {almanac['day_animal']})\n"
+            f"⚠️ **សត្វឆ្នាំឆុងថ្ងៃនេះ:** **{almanac['clash_animal']}**\n\n"
+            f"👑 **១. ក្បួនតម្រាខ្មែរបុរាណ:**\n"
+            f"• **ឫក្សពារ:** **{khmer['day_quality']}**\n"
+            f"• **ពណ៌សម្លៀកបំពាក់នាំលាភ:** **{khmer['lucky_color']}**\n"
+            f"  👉 *អត្ថន័យ:* {khmer['color_meaning']}\n\n"
+            f"🏛️ **២. ក្បួនចិនសកល TUNG SHU:**\n"
+            f"• **12 Day Officers:** **{officer['kh']}** ({officer['quality']})\n"
+            f"  👉 *កិច្ចការគួរបំពេញ:* {officer['meaning']}\n"
+            f"• **តារានក្ខត្តឫក្ស ២៨:** `{almanac['constellation']}`\n\n"
+            f"🧭 **៣. ទិសនាំលាភសំណាងប្រចាំថ្ងៃ:**\n"
+            f"• 💰 **ទិសទេវតាទ្រព្យ (Wealth):** {dirs['wealth_god']}\n"
+            f"• 👑 **ទិសទេវតាមនុស្សខ្ពង់ខ្ពស់ (Nobleman):** {dirs['nobleman_god']}\n"
+            f"• 💖 **ទិសទេវតាមង្គល (Joy):** {dirs['joy_god']}"
+        )
+        keyboard = [
+            [
+                InlineKeyboardButton("🌅 មើលរាសីប្រចាំថ្ងៃ (24H)", callback_data="cel_daily"),
+                InlineKeyboardButton("📅 រាសីប្រចាំខែ", callback_data="cel_monthly")
+            ],
+            [InlineKeyboardButton("🏠 ម៉ឺនុយដើម", callback_data="menu_main")]
+        ]
+        await self._safe_reply(update.message, msg, reply_markup=InlineKeyboardMarkup(keyboard))
+
     async def button_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle all interactive inline keyboard clicks seamlessly."""
         query = update.callback_query
@@ -1432,8 +1785,8 @@ class FengShuiTelegramBot:
 
         try:
             # Check VIP permissions for gated callback features
-            gated_prefixes = ("curr_", "render_", "calc_")
-            gated_exact = {"menu_curriculum", "menu_gua", "menu_flyingstars", "menu_bazi", "menu_predict", "menu_render3d", "menu_ask", "menu_love"}
+            gated_prefixes = ("curr_", "render_", "calc_", "cel_")
+            gated_exact = {"menu_curriculum", "menu_gua", "menu_flyingstars", "menu_bazi", "menu_predict", "menu_render3d", "menu_ask", "menu_love", "menu_celestial"}
             if (data in gated_exact or any(data.startswith(p) for p in gated_prefixes)) and not self._is_vip_or_admin(from_user.id):
                 await self._send_vip_required_notice(query, from_user.id)
                 return
@@ -1447,6 +1800,118 @@ class FengShuiTelegramBot:
                     "សូមជ្រើសរើសមុខងារដែលអ្នកចង់ប្រើប្រាស់៖",
                     reply_markup=self._get_main_keyboard(from_user.id)
                 )
+
+            # Pillar 9: Celestial Menu & Callbacks
+            elif data == "menu_celestial":
+                await self._send_celestial_menu(query, is_edit=True)
+
+            elif data == "cel_daily":
+                user = self.db.get_or_create_user(from_user.id)
+                b_date = user.get("birth_date") or "1990-05-15"
+                b_time = user.get("birth_time") or "12:00"
+                gender = user.get("gender") or "male"
+                report = self.celestial.generate_daily_celestial_report(b_date, b_time, gender)
+                keyboard = [
+                    [
+                        InlineKeyboardButton("📜 ក្បួនតម្រា Tung Shu & ខ្មែរ", callback_data="cel_almanac"),
+                        InlineKeyboardButton("📅 រាសីប្រចាំខែ", callback_data="cel_monthly")
+                    ],
+                    [
+                        InlineKeyboardButton("⚙️ កែប្រែម៉ោងកំណើត", callback_data="cel_setbirth_prompt"),
+                        InlineKeyboardButton("🌌 ម៉ឺនុយហោរាសាស្ត្រ", callback_data="menu_celestial")
+                    ],
+                    [InlineKeyboardButton("🏠 ម៉ឺនុយដើម", callback_data="menu_main")]
+                ]
+                await self._safe_edit(query, report, reply_markup=InlineKeyboardMarkup(keyboard))
+
+            elif data == "cel_monthly":
+                user = self.db.get_or_create_user(from_user.id)
+                b_date = user.get("birth_date") or "1990-05-15"
+                b_time = user.get("birth_time") or "12:00"
+                gender = user.get("gender") or "male"
+                report = self.celestial.generate_monthly_celestial_report(b_date, b_time, gender)
+                keyboard = [
+                    [
+                        InlineKeyboardButton("🌅 រាសីប្រចាំថ្ងៃ (24H)", callback_data="cel_daily"),
+                        InlineKeyboardButton("🎊 រាសីប្រចាំឆ្នាំ", callback_data="cel_yearly")
+                    ],
+                    [
+                        InlineKeyboardButton("🌌 ម៉ឺនុយហោរាសាស្ត្រ", callback_data="menu_celestial"),
+                        InlineKeyboardButton("🏠 ម៉ឺនុយដើម", callback_data="menu_main")
+                    ]
+                ]
+                await self._safe_edit(query, report, reply_markup=InlineKeyboardMarkup(keyboard))
+
+            elif data == "cel_yearly":
+                user = self.db.get_or_create_user(from_user.id)
+                b_date = user.get("birth_date") or "1990-05-15"
+                b_time = user.get("birth_time") or "12:00"
+                gender = user.get("gender") or "male"
+                report = self.celestial.generate_yearly_celestial_report(b_date, b_time, gender)
+                keyboard = [
+                    [
+                        InlineKeyboardButton("🌅 រាសីប្រចាំថ្ងៃ (24H)", callback_data="cel_daily"),
+                        InlineKeyboardButton("📅 រាសីប្រចាំខែ", callback_data="cel_monthly")
+                    ],
+                    [
+                        InlineKeyboardButton("🌌 ម៉ឺនុយហោរាសាស្ត្រ", callback_data="menu_celestial"),
+                        InlineKeyboardButton("🏠 ម៉ឺនុយដើម", callback_data="menu_main")
+                    ]
+                ]
+                await self._safe_edit(query, report, reply_markup=InlineKeyboardMarkup(keyboard))
+
+            elif data == "cel_almanac":
+                almanac = self.celestial.calculate_global_almanac()
+                officer = almanac["day_officer"]
+                khmer = almanac["khmer_almanac"]
+                dirs = almanac["auspicious_directions"]
+                msg = (
+                    "📜 **ក្បួនតម្រាខ្មែរ & ចិនសកលប្រចាំថ្ងៃ (DAILY GLOBAL ALMANAC)** 📜\n"
+                    "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                    f"📅 **កាលបរិច្ឆេទ:** `{almanac['date']}` ({almanac['day_name_kh']})\n"
+                    f"🏛️ **សសរស្តម្ភថ្ងៃ:** `{almanac['day_ganzhi']}` (ឆ្នាំ {almanac['day_animal']})\n"
+                    f"⚠️ **សត្វឆ្នាំឆុងថ្ងៃនេះ:** **{almanac['clash_animal']}**\n\n"
+                    f"👑 **១. ក្បួនតម្រាខ្មែរបុរាណ:**\n"
+                    f"• **ឫក្សពារ:** **{khmer['day_quality']}**\n"
+                    f"• **ពណ៌សម្លៀកបំពាក់នាំលាភ:** **{khmer['lucky_color']}**\n"
+                    f"  👉 *អត្ថន័យ:* {khmer['color_meaning']}\n\n"
+                    f"🏛️ **២. ក្បួនចិនសកល TUNG SHU:**\n"
+                    f"• **12 Day Officers:** **{officer['kh']}** ({officer['quality']})\n"
+                    f"  👉 *កិច្ចការគួរបំពេញ:* {officer['meaning']}\n"
+                    f"• **តារានក្ខត្តឫក្ស ២៨:** `{almanac['constellation']}`\n\n"
+                    f"🧭 **៣. ទិសនាំលាភសំណាងប្រចាំថ្ងៃ:**\n"
+                    f"• 💰 **ទិសទេវតាទ្រព្យ (Wealth):** {dirs['wealth_god']}\n"
+                    f"• 👑 **ទិសទេវតាមនុស្សខ្ពង់ខ្ពស់ (Nobleman):** {dirs['nobleman_god']}\n"
+                    f"• 💖 **ទិសទេវតាមង្គល (Joy):** {dirs['joy_god']}"
+                )
+                keyboard = [
+                    [
+                        InlineKeyboardButton("🌅 មើលរាសីប្រចាំថ្ងៃ (24H)", callback_data="cel_daily"),
+                        InlineKeyboardButton("📅 រាសីប្រចាំខែ", callback_data="cel_monthly")
+                    ],
+                    [
+                        InlineKeyboardButton("🌌 ម៉ឺនុយហោរាសាស្ត្រ", callback_data="menu_celestial"),
+                        InlineKeyboardButton("🏠 ម៉ឺនុយដើម", callback_data="menu_main")
+                    ]
+                ]
+                await self._safe_edit(query, msg, reply_markup=InlineKeyboardMarkup(keyboard))
+
+            elif data == "cel_setbirth_prompt":
+                prompt_text = (
+                    "⚙️ **របៀបកំណត់ម៉ោង & ថ្ងៃខែឆ្នាំកំណើតផ្ទាល់ខ្លួន**\n"
+                    "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                    "ដើម្បីកំណត់ព័ត៌មានជោគជតាសម្រាប់ផ្ញើ Alert ម៉ោង ៥ ព្រឹក សូមវាយពាក្យបញ្ជាដូចខាងក្រោម៖\n\n"
+                    "👉 `/setbirth <YYYY-MM-DD> [HH:MM] [male/female]`\n\n"
+                    "**ឧទាហរណ៍ជាក់ស្តែង៖**\n"
+                    "• `/setbirth 1990-05-15 08:30 male`\n"
+                    "• `/setbirth 1992-08-20 14:00 female`\n\n"
+                    "*(ប្រព័ន្ធនឹងគណនា BaZi ៤ សសរស្តម្ភ ៨ តួអក្សរ ម៉ោងកំណើត និងធាតុ Useful God ដោយស្វ័យប្រវត្តិ!)*"
+                )
+                keyboard = [
+                    [InlineKeyboardButton("🌌 ត្រឡប់ទៅម៉ឺនុយហោរាសាស្ត្រ", callback_data="menu_celestial")],
+                    [InlineKeyboardButton("🏠 ម៉ឺនុយដើម", callback_data="menu_main")]
+                ]
+                await self._safe_edit(query, prompt_text, reply_markup=InlineKeyboardMarkup(keyboard))
 
             # Love & Peach Blossom Menu
             elif data == "menu_love":
@@ -2014,6 +2479,14 @@ class FengShuiTelegramBot:
             app.add_handler(CommandHandler("flyingstars", self.flyingstars_command))
             app.add_handler(CommandHandler("bazi", self.bazi_command))
             app.add_handler(CommandHandler("predict", self.predict_command))
+            app.add_handler(CommandHandler("daily", self.daily_command))
+            app.add_handler(CommandHandler("horoscope", self.daily_command))
+            app.add_handler(CommandHandler("monthly", self.monthly_command))
+            app.add_handler(CommandHandler("yearly", self.yearly_command))
+            app.add_handler(CommandHandler("almanac", self.almanac_command))
+            app.add_handler(CommandHandler("tungshu", self.almanac_command))
+            app.add_handler(CommandHandler("setbirth", self.setbirth_command))
+            app.add_handler(CommandHandler("celestial", self.celestial_command))
             app.add_handler(CommandHandler("love", self.love_command))
             app.add_handler(CommandHandler("mahasneh", self.love_command))
             app.add_handler(CommandHandler("ask", self.handle_message))
