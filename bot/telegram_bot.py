@@ -2228,10 +2228,10 @@ class FengShuiTelegramBot:
                 await self._send_celestial_menu(query, is_edit=True)
 
             elif data == "cel_daily":
-                user = self.db.get_or_create_user(from_user.id)
-                b_date = user.get("birth_date") or "1990-05-15"
-                b_time = user.get("birth_time") or "12:00"
-                gender = user.get("gender") or "male"
+                self_prof = self.db.get_self_profile(from_user.id) or {}
+                b_date = self_prof.get("birth_date") or "1990-05-15"
+                b_time = self_prof.get("birth_time") or "12:00"
+                gender = self_prof.get("gender") or "male"
                 report = self.celestial.generate_daily_celestial_report(b_date, b_time, gender)
                 keyboard = [
                     [
@@ -2247,10 +2247,10 @@ class FengShuiTelegramBot:
                 await self._safe_edit(query, report, reply_markup=InlineKeyboardMarkup(keyboard))
 
             elif data == "cel_monthly":
-                user = self.db.get_or_create_user(from_user.id)
-                b_date = user.get("birth_date") or "1990-05-15"
-                b_time = user.get("birth_time") or "12:00"
-                gender = user.get("gender") or "male"
+                self_prof = self.db.get_self_profile(from_user.id) or {}
+                b_date = self_prof.get("birth_date") or "1990-05-15"
+                b_time = self_prof.get("birth_time") or "12:00"
+                gender = self_prof.get("gender") or "male"
                 report = self.celestial.generate_monthly_celestial_report(b_date, b_time, gender)
                 keyboard = [
                     [
@@ -2265,10 +2265,10 @@ class FengShuiTelegramBot:
                 await self._safe_edit(query, report, reply_markup=InlineKeyboardMarkup(keyboard))
 
             elif data == "cel_yearly":
-                user = self.db.get_or_create_user(from_user.id)
-                b_date = user.get("birth_date") or "1990-05-15"
-                b_time = user.get("birth_time") or "12:00"
-                gender = user.get("gender") or "male"
+                self_prof = self.db.get_self_profile(from_user.id) or {}
+                b_date = self_prof.get("birth_date") or "1990-05-15"
+                b_time = self_prof.get("birth_time") or "12:00"
+                gender = self_prof.get("gender") or "male"
                 report = self.celestial.generate_yearly_celestial_report(b_date, b_time, gender)
                 keyboard = [
                     [

@@ -248,11 +248,14 @@ class TestSupremeFengShuiSystem(unittest.TestCase):
     # 15. Test Mandatory Profile Gate & 1000 Curriculum Exemption
     def test_15_mandatory_profile_gate_and_curriculum_exemption(self):
         """Verify that VIP users without /data profile are gated from analysis but can study curriculum."""
-        from database.db_manager import db_manager
+        from database.db_manager import db_manager, get_db_connection
         from bot.telegram_bot import FengShuiTelegramBot
 
         test_vip_id = 888777
         db_manager.clear_family_members(test_vip_id)
+        with get_db_connection() as conn:
+            conn.cursor().execute("UPDATE users SET birth_date = NULL, birth_time = NULL WHERE telegram_id = ?", (test_vip_id,))
+            conn.commit()
         # Create user without birth profile
         db_manager.get_or_create_user(test_vip_id, username="vip_test", full_name="VIP Test User")
         db_manager.set_user_vip_manually(test_vip_id, "monthly", admin_id=859271875)
@@ -276,6 +279,37 @@ class TestSupremeFengShuiSystem(unittest.TestCase):
         # 4. Now VIP has registered profile
         self.assertTrue(db_manager.has_registered_profile(test_vip_id))
         self.assertTrue(bot._has_registered_profile(test_vip_id))
+
+    # 16. Test Super Smart Daily, Monthly, and Yearly Treatise Formatting & Length Calibration
+    def test_16_super_smart_daily_monthly_yearly_treatise_formatting(self):
+        """Verify that /daily, /monthly, and /yearly reports are 3500-4000 chars, 100% Khmer, and cleanly formatted."""
+        from engines.celestial_astrology_engine import CelestialAstrologyEngine
+        import re
+
+        celestial = CelestialAstrologyEngine()
+        birth_date = "1990-05-15"
+        birth_time = "10:30"
+        gender = "male"
+
+        d_report = celestial.generate_daily_celestial_report(birth_date, birth_time, gender)
+        m_report = celestial.generate_monthly_celestial_report(birth_date, birth_time, gender)
+        y_report = celestial.generate_yearly_celestial_report(birth_date, birth_time, gender)
+
+        for name, txt in [("Daily", d_report), ("Monthly", m_report), ("Yearly", y_report)]:
+            # 1. Length constraint 3500 - 4000 characters
+            self.assertTrue(3500 <= len(txt) <= 4000, f"{name} length is {len(txt)}, expected 3500-4000")
+            # 2. No markdown bold/markup
+            self.assertNotIn("**", txt, f"{name} must not contain **")
+            self.assertNotIn("++", txt, f"{name} must not contain ++")
+            self.assertNotIn("==", txt, f"{name} must not contain ==")
+            # 3. No word របាយការណ៍
+            self.assertNotIn("របាយការណ៍", txt, f"{name} must not contain របាយការណ៍")
+            # 4. No English characters
+            self.assertFalse(re.search(r'[a-zA-Z]', txt), f"{name} must not contain English characters")
+            # 5. No double bullet icons (e.g. • 💰)
+            self.assertFalse(re.search(r'•\s*[💰👑🎨🏛️🌌⚠️🧭⏰✨💊💡🌿💼💖🌸☀️🍂❄️🧹🍎🏮🚫]', txt), f"{name} must not have double bullets")
+            # 6. No double section headers (e.g. 📜 ១.)
+            self.assertFalse(re.search(r'[📜🧭⏰💊📊💡👑🗓️]\s*[១២៣៤៥៦៧៨៩០]+\.', txt), f"{name} must not have double section headers")
 
 
 if __name__ == "__main__":
