@@ -362,5 +362,58 @@ class TestSupremeFengShuiSystem(unittest.TestCase):
             self.assertFalse(re.search(r'[📜🧭⏰💊📊💡👑🗓️⚖️🤝🛏️📖🖼️👁️]\s*[១២៣៤៥៦៧៨៩០]+\.', txt), f"{name} contains double section headers")
 
 
+    # 18. Test Telegram Bot Target Resolution, Safe Reply, and Callbacks
+    def test_18_telegram_bot_target_resolution_and_callbacks(self):
+        """Verify that telegram bot target resolution handles Update, Message, CallbackQuery seamlessly."""
+        from bot.telegram_bot import FengShuiTelegramBot
+
+        bot = FengShuiTelegramBot("8772506380:AAG_qjamcB9ETNaBllNve3-qcPuLgcncgp4")
+
+        class DummyMsg:
+            async def reply_text(self, text, **kwargs):
+                return text
+
+        class DummyUpdateWithEffMsg:
+            def __init__(self, msg):
+                self.effective_message = msg
+
+        class DummyQuery:
+            def __init__(self, msg):
+                self.message = msg
+
+        class DummyUpdateWithQuery:
+            def __init__(self, query):
+                self.callback_query = query
+
+        # 1. Target is None
+        self.assertIsNone(bot._resolve_target(None))
+
+        # 2. Target is message object
+        msg = DummyMsg()
+        self.assertEqual(bot._resolve_target(msg), msg)
+
+        # 3. Target is Update with effective_message
+        up1 = DummyUpdateWithEffMsg(msg)
+        self.assertEqual(bot._resolve_target(up1), msg)
+
+        # 4. Target is CallbackQuery
+        query = DummyQuery(msg)
+        up2 = DummyUpdateWithQuery(query)
+        self.assertEqual(bot._resolve_target(up2), msg)
+
+        # 5. Verify Flying Stars grid calculation schema
+        res_fs = bot.calc_engine.calculate_flying_stars(2026)
+        self.assertTrue(res_fs["success"])
+        grid = res_fs["data"]["grid"]
+        center = grid.get("CENTER") or grid.get("Center")
+        self.assertIsNotNone(center)
+        self.assertIn("star_number", center)
+
+        # 6. Verify BaZi calculation schema
+        res_bazi = bot.calc_engine.calculate_bazi("1990-05-15", "12:00")
+        self.assertTrue(res_bazi["success"])
+        self.assertIn("pillars", res_bazi["data"])
+
+
 if __name__ == "__main__":
     unittest.main()

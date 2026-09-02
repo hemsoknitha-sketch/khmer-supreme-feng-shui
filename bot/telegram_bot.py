@@ -95,8 +95,32 @@ class FengShuiTelegramBot:
             chunks.append(remaining)
         return chunks
 
-    async def _safe_reply(self, message, text: str, reply_markup=None):
-        """Safely reply with automatic markdown fallback and multi-message pagination for long text."""
+    def _resolve_target(self, target):
+        """
+        Dynamically extract a valid Telegram Message or CallbackQuery object from any target
+        (which may be an Update, Message, CallbackQuery, or None).
+        """
+        if target is None:
+            return None
+        if hasattr(target, "reply_text"):
+            return target
+        if hasattr(target, "effective_message") and target.effective_message:
+            return target.effective_message
+        if hasattr(target, "message") and target.message and hasattr(target.message, "reply_text"):
+            return target.message
+        if hasattr(target, "callback_query") and target.callback_query:
+            if hasattr(target.callback_query, "message") and target.callback_query.message:
+                return target.callback_query.message
+            return target.callback_query
+        return None
+
+    async def _safe_reply(self, target, text: str, reply_markup=None):
+        """Safely reply or send message with automatic markdown fallback and multi-message pagination for long text."""
+        msg_obj = self._resolve_target(target)
+        if msg_obj is None:
+            logger.error("Failed to reply: target message cannot be resolved (None).")
+            return None
+
         text = self.security.redact_secrets(text)
         chunks = self._chunk_text(text, max_chunk=3900)
         last_msg = None
@@ -106,17 +130,27 @@ class FengShuiTelegramBot:
             markup = reply_markup if is_last else None
 
             try:
-                last_msg = await message.reply_text(chunk, reply_markup=markup, parse_mode="Markdown")
+                last_msg = await msg_obj.reply_text(chunk, reply_markup=markup, parse_mode="Markdown")
             except Exception as e:
                 logger.debug(f"Markdown parse fallback for chunk {idx}: {e}")
                 try:
-                    last_msg = await message.reply_text(chunk, reply_markup=markup)
+                    last_msg = await msg_obj.reply_text(chunk, reply_markup=markup)
                 except Exception as e2:
                     logger.error(f"Failed to reply chunk {idx}: {e2}")
         return last_msg
 
-    async def _safe_edit(self, query, text: str, reply_markup=None):
+    async def _safe_edit(self, target, text: str, reply_markup=None):
         """Safely edit message text or chunk into multiple messages if length exceeds Telegram 4000 char limits."""
+        query = None
+        if hasattr(target, "edit_message_text"):
+            query = target
+        elif hasattr(target, "callback_query") and target.callback_query:
+            query = target.callback_query
+
+        if query is None:
+            # If target is not a callback query, fall back to safe reply
+            return await self._safe_reply(target, text, reply_markup=reply_markup)
+
         text = self.security.redact_secrets(text)
         chunks = self._chunk_text(text, max_chunk=3900)
 
@@ -144,10 +178,12 @@ class FengShuiTelegramBot:
                 is_last = (idx == len(chunks) - 1)
                 markup = reply_markup if is_last else None
                 try:
-                    await query.message.reply_text(chunks[idx], reply_markup=markup, parse_mode="Markdown")
+                    if query.message:
+                        await query.message.reply_text(chunks[idx], reply_markup=markup, parse_mode="Markdown")
                 except Exception:
                     try:
-                        await query.message.reply_text(chunks[idx], reply_markup=markup)
+                        if query.message:
+                            await query.message.reply_text(chunks[idx], reply_markup=markup)
                     except Exception:
                         pass
 
@@ -158,7 +194,7 @@ class FengShuiTelegramBot:
         user = self.db.get_or_create_user(user_id)
         return user.get("role") in ("super_admin", "vip_monthly", "vip_yearly", "vip_lifetime") or user.get("vip_tier") in ("monthly", "yearly", "lifetime", "admin")
 
-    async def _send_vip_required_notice(self, message_or_query, from_user_id: int):
+    async def _send_vip_required_notice(self, target, from_user_id: int):
         """Send attractive VIP lock notice directing users to @HemSinath."""
         msg = (
             "🔒 **មុខងារនេះត្រូវបានរក្សាសិទ្ធិសម្រាប់តែសមាជិក VIP & SUPER ADMIN ប៉ុណ្ណោះ!** 🔒\n"
@@ -186,10 +222,7 @@ class FengShuiTelegramBot:
                 InlineKeyboardButton("❓ ជំនួយ (Help)", callback_data="menu_help")
             ]
         ]
-        if hasattr(message_or_query, "reply_text"):
-            await self._safe_reply(message_or_query, msg, reply_markup=InlineKeyboardMarkup(keyboard))
-        else:
-            await self._safe_edit(message_or_query, msg, reply_markup=InlineKeyboardMarkup(keyboard))
+        await self._safe_edit(target, msg, reply_markup=InlineKeyboardMarkup(keyboard))
 
     def _has_registered_profile(self, user_id: int) -> bool:
         """Check if user has registered their personal profile in /data or database (Super Admins bypass)."""
@@ -200,7 +233,7 @@ class FengShuiTelegramBot:
             return True
         return self.db.has_registered_profile(user_id)
 
-    async def _send_profile_required_notice(self, message_or_query, from_user_id: int):
+    async def _send_profile_required_notice(self, target, from_user_id: int):
         """Send smart mandatory profile registration notice explaining why /data is essential before analysis."""
         msg = (
             "⚠️ **សេចក្តីជូនដំណឹង៖ តម្រូវឱ្យកត់ត្រាព័ត៌មានផ្ទាល់ខ្លួនក្នុង /data ជាមុនសិន!** ⚠️\n"
@@ -221,10 +254,7 @@ class FengShuiTelegramBot:
             [InlineKeyboardButton("📚 រៀនមេរៀនទាំង ១០០០ (Curriculum)", callback_data="menu_curriculum")],
             [InlineKeyboardButton("🏠 ម៉ឺនុយដើម", callback_data="menu_main")]
         ]
-        if hasattr(message_or_query, "reply_text"):
-            await self._safe_reply(message_or_query, msg, reply_markup=InlineKeyboardMarkup(keyboard))
-        else:
-            await self._safe_edit(message_or_query, msg, reply_markup=InlineKeyboardMarkup(keyboard))
+        await self._safe_edit(target, msg, reply_markup=InlineKeyboardMarkup(keyboard))
 
     def _get_main_keyboard(self, user_id: int = 0) -> InlineKeyboardMarkup:
         """Construct role-based interactive keyboard: Super Admin vs VIP vs Free/Unactivated."""
@@ -534,7 +564,7 @@ class FengShuiTelegramBot:
         """Handle /vip command to display subscription status & upgrade options."""
         from_user = update.effective_user
         user = self.db.get_or_create_user(from_user.id, from_user.username or "", from_user.full_name or "")
-        await self._send_vip_view(update.message, user)
+        await self._send_vip_view(update, user)
 
     async def _send_vip_view(self, message_or_query, user: Dict[str, Any], is_edit: bool = False):
         """Render VIP Dashboard View."""
@@ -592,7 +622,7 @@ class FengShuiTelegramBot:
 
         if not args:
             await self._safe_reply(
-                update.message,
+                update,
                 "⚠️ **សូមបញ្ចូលលេខកូដអាជ្ញាប័ណ្ណ (License Key)**\n"
                 "ឧទាហរណ៍៖ `/redeem FS-M-ABCD-1234` ឬ `/redeem FS-Y-XXXX-YYYY`"
             )
@@ -615,10 +645,10 @@ class FengShuiTelegramBot:
                 [InlineKeyboardButton("🧠 សួរគ្រូហុងស៊ុយ AI ភ្លាមៗ", callback_data="menu_ask")],
                 [InlineKeyboardButton("🏠 ម៉ឺនុយដើម", callback_data="menu_main")]
             ]
-            await self._safe_reply(update.message, success_text, reply_markup=InlineKeyboardMarkup(keyboard))
+            await self._safe_reply(update, success_text, reply_markup=InlineKeyboardMarkup(keyboard))
         else:
             await self._safe_reply(
-                update.message,
+                update,
                 f"{res['error']}\n\n👉 សូមទាក់ទង Super Admin ឬពិនិត្យមើលលេខកូដ Key ឡើងវិញ។"
             )
 
@@ -631,13 +661,13 @@ class FengShuiTelegramBot:
 
         if user.get("role") != "super_admin":
             await self._safe_reply(
-                update.message,
+                update,
                 "⛔ **ការបដិសេធសិទ្ធិ (Access Denied)**\n"
                 "ផ្ទាំងគ្រប់គ្រងនេះសម្រាប់តែ Super Admin ប៉ុណ្ណោះ។"
             )
             return
 
-        await self._send_admin_dashboard(update.message, user)
+        await self._send_admin_dashboard(update, user)
 
     async def _send_admin_dashboard(self, message_or_query, admin_user: Dict[str, Any], is_edit: bool = False):
         """Render Super Admin Dashboard."""
@@ -763,7 +793,7 @@ class FengShuiTelegramBot:
 
     async def health_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /health command to display live VPS, CPU, RAM, Disk, and AI Models telemetry."""
-        await self._send_health_view(update.message, is_edit=False)
+        await self._send_health_view(update, is_edit=False)
 
     async def _send_health_view(self, message_or_query, is_edit: bool = False):
         """Render live system health telemetry view in super smart and beautiful format."""
@@ -829,13 +859,13 @@ class FengShuiTelegramBot:
         from_user = update.effective_user
         admin = self.db.get_or_create_user(from_user.id)
         if admin.get("role") != "super_admin":
-            await self._safe_reply(update.message, "⛔ Access Denied.")
+            await self._safe_reply(update, "⛔ Access Denied.")
             return
 
         args = context.args
         if len(args) < 2:
             await self._safe_reply(
-                update.message,
+                update,
                 "⚠️ **របៀបប្រើប្រាស់៖** `/setvip <user_id> <monthly|yearly|lifetime|free>`\n"
                 "ឧទាហរណ៍៖ `/setvip 123456789 yearly`"
             )
@@ -848,7 +878,7 @@ class FengShuiTelegramBot:
 
             if res["success"]:
                 await self._safe_reply(
-                    update.message,
+                    update,
                     f"✅ **បានផ្លាស់ប្តូរកម្រិត VIP ជោគជ័យ!**\n"
                     f"• Target ID: `{target_id}`\n"
                     f"• Role: `{res['role']}`\n"
@@ -856,16 +886,16 @@ class FengShuiTelegramBot:
                     f"• Expiry: `{res['expiry']}`"
                 )
             else:
-                await self._safe_reply(update.message, f"❌ កំហុស៖ {res.get('error')}")
+                await self._safe_reply(update, f"❌ កំហុស៖ {res.get('error')}")
         except ValueError:
-            await self._safe_reply(update.message, "❌ User ID ត្រូវតែជាលេខ។")
+            await self._safe_reply(update, "❌ User ID ត្រូវតែជាលេខ។")
 
     async def genkeys_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /genkeys <monthly|yearly|lifetime> [count] (Admin Only)."""
         from_user = update.effective_user
         admin = self.db.get_or_create_user(from_user.id)
         if admin.get("role") != "super_admin":
-            await self._safe_reply(update.message, "⛔ Access Denied.")
+            await self._safe_reply(update, "⛔ Access Denied.")
             return
 
         args = context.args
@@ -882,19 +912,19 @@ class FengShuiTelegramBot:
             f"{keys_text}\n\n"
             f"*(អ្នកអាច Copy Key ទាំងនេះផ្ញើជូនអតិថិជន ដើម្បីឱ្យពួកគេវាយ `/redeem <key>`)*"
         )
-        await self._safe_reply(update.message, msg)
+        await self._safe_reply(update, msg)
 
     async def broadcast_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /broadcast <message> (Admin Only)."""
         from_user = update.effective_user
         admin = self.db.get_or_create_user(from_user.id)
         if admin.get("role") != "super_admin":
-            await self._safe_reply(update.message, "⛔ Access Denied.")
+            await self._safe_reply(update, "⛔ Access Denied.")
             return
 
         msg_text = " ".join(context.args)
         if not msg_text:
-            await self._safe_reply(update.message, "⚠️ សូមបញ្ចូលសារដែលចង់ Broadcast៖ `/broadcast <សាររបស់អ្នក>`")
+            await self._safe_reply(update, "⚠️ សូមបញ្ចូលសារដែលចង់ Broadcast៖ `/broadcast <សាររបស់អ្នក>`")
             return
 
         users = self.db.get_all_users_list(limit=500)
@@ -909,7 +939,7 @@ class FengShuiTelegramBot:
             except Exception as e:
                 logger.debug(f"Could not send broadcast to {u['telegram_id']}: {e}")
 
-        await self._safe_reply(update.message, f"✅ បានផ្ញើសារប្រកាសជូន {sent_count}/{len(users)} នាក់ដោយជោគជ័យ!")
+        await self._safe_reply(update, f"✅ បានផ្ញើសារប្រកាសជូន {sent_count}/{len(users)} នាក់ដោយជោគជ័យ!")
 
     async def _start_daily_backup_scheduler(self, application: Application):
         """
@@ -1110,11 +1140,11 @@ class FengShuiTelegramBot:
         from_user = update.effective_user
         admin = self.db.get_or_create_user(from_user.id)
         if admin.get("role") != "super_admin" and from_user.id not in config.ADMIN_USER_IDS:
-            await self._safe_reply(update.message, "⛔ Access Denied. Command reserved for Super Admin.")
+            await self._safe_reply(update, "⛔ Access Denied. Command reserved for Super Admin.")
             return
 
         status_msg = await self._safe_reply(
-            update.message,
+            update,
             "⏳ **កំពុងដំណើរការបង្កើត Data Backup និង Zip File...**\n*(សូមរង់ចាំប្រហែល ១-២ វិនាទី)*"
         )
 
@@ -1127,15 +1157,14 @@ class FengShuiTelegramBot:
                 except Exception:
                     pass
         else:
-            await self._safe_reply(update.message, f"❌ កំហុសក្នុងការបង្កើត Backup៖ {res.get('error')}")
+            await self._safe_reply(update, f"❌ កំហុសក្នុងការបង្កើត Backup៖ {res.get('error')}")
 
     # ==================== GENERAL USER COMMANDS ====================
 
-    async def help_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Handle /help command."""
-        from_user = update.effective_user
-        user = self.db.get_or_create_user(from_user.id)
-        is_admin = user.get("role") == "super_admin"
+    def _build_help_text(self, user_id: int) -> str:
+        """Construct full help guide text for user based on role."""
+        user = self.db.get_or_create_user(user_id)
+        is_admin = user.get("role") == "super_admin" or user_id in config.ADMIN_USER_IDS
 
         help_text = (
             "📖 **របៀបប្រើប្រាស់ពាក្យបញ្ជា (Command Guide):**\n"
@@ -1154,7 +1183,17 @@ class FengShuiTelegramBot:
             "• `/bazi 1988-05-15 10:30`\n\n"
             "5️⃣ **ទស្សន៍ទាយសំណាងប្រចាំថ្ងៃ:**\n"
             "• `/predict 1988-05-15`\n\n"
-            "6️⃣ **ពិគ្រោះយោបល់ជាមួយ AI Master:**\n"
+            "6️⃣ **កត់ត្រាទិន្នន័យគ្រួសារ & រាសីរួម (Pillar 10):**\n"
+            "• `/data ខ្ញុំ 1990-05-15 08:30 male`\n"
+            "• `/family` - មើលតារាងគ្រួសារ និងវិភាគរាសីរួម\n\n"
+            "7️⃣ **ហោរាសាស្ត្រ & ហុងស៊ុយ (Pillar 9):**\n"
+            "• `/daily` - រាសីប្រចាំថ្ងៃ (24H)\n"
+            "• `/monthly` - រាសីប្រចាំខែ\n"
+            "• `/yearly` - រាសីប្រចាំឆ្នាំ\n"
+            "• `/almanac` - ក្បួនតម្រាខ្មែរ & Tung Shu\n\n"
+            "8️⃣ **ហុងស៊ុយ & មហាស្នេហ៍:**\n"
+            "• `/love 1990-05-15 male 1992-08-20 female`\n\n"
+            "9️⃣ **ពិគ្រោះយោបល់ជាមួយ AI Master:**\n"
             "• `/ask តើខ្ញុំគួររៀបចំបន្ទប់គេង និងតុធ្វើការយ៉ាងណា?`\n"
         )
 
@@ -1164,16 +1203,22 @@ class FengShuiTelegramBot:
                 "• `/admin` - បើកផ្ទាំងគ្រប់គ្រង Admin Panel\n"
                 "• `/genkeys monthly 5` - បង្កើត Key 5 អាជ្ញាប័ណ្ណ\n"
                 "• `/setvip <user_id> yearly` - ផ្តល់ VIP ដោយដៃ\n"
+                "• `/backup` - ទាញយក Backup ទិន្នន័យភ្លាមៗ\n"
                 "• `/broadcast <message>` - ផ្ញើសារប្រកាសទូទៅ\n"
             )
+        return help_text
 
-        await self._safe_reply(update.message, help_text, reply_markup=self._get_main_keyboard(from_user.id))
+    async def help_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Handle /help command."""
+        from_user = update.effective_user
+        help_text = self._build_help_text(from_user.id)
+        await self._safe_reply(update, help_text, reply_markup=self._get_main_keyboard(from_user.id))
 
     async def curriculum_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /curriculum command (VIP & Super Admin Only)."""
         from_user = update.effective_user
         if not self._is_vip_or_admin(from_user.id):
-            await self._send_vip_required_notice(update.message, from_user.id)
+            await self._send_vip_required_notice(update, from_user.id)
             return
 
         cats = self.curriculum.get_categories()
@@ -1195,28 +1240,28 @@ class FengShuiTelegramBot:
             InlineKeyboardButton("📖 រៀនមេរៀនទី ១", callback_data="curr_les_1"),
             InlineKeyboardButton("🏠 ម៉ឺនុយដើម", callback_data="menu_main")
         ])
-        await self._safe_reply(update.message, text, reply_markup=InlineKeyboardMarkup(keyboard))
+        await self._safe_reply(update, text, reply_markup=InlineKeyboardMarkup(keyboard))
 
     async def learn_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /learn <lesson_id> command (VIP & Super Admin Only)."""
         from_user = update.effective_user
         if not self._is_vip_or_admin(from_user.id):
-            await self._send_vip_required_notice(update.message, from_user.id)
+            await self._send_vip_required_notice(update, from_user.id)
             return
 
         args = context.args
         if not args:
             await self._safe_reply(
-                update.message,
+                update,
                 "⚠️ សូមបញ្ជាក់លេខមេរៀនពី ១ ដល់ ១០០០ (ឧទាហរណ៍៖ `/learn 1` ឬ `/learn 23`)"
             )
             return
 
         try:
             lesson_id = int(args[0])
-            await self._send_lesson_view(update.message, lesson_id)
+            await self._send_lesson_view(update, lesson_id)
         except ValueError:
-            await self._safe_reply(update.message, "❌ លេខមេរៀនមិនត្រឹមត្រូវ។ សូមបញ្ចូលលេខពី ១ ដល់ ១០០០។")
+            await self._safe_reply(update, "❌ លេខមេរៀនមិនត្រឹមត្រូវ។ សូមបញ្ចូលលេខពី ១ ដល់ ១០០០។")
 
     async def _send_lesson_view(self, message_or_query, lesson_id: int, is_edit: bool = False):
         """Render full lesson view with interactive Next/Previous and Deep Explain buttons."""
@@ -1279,29 +1324,26 @@ class FengShuiTelegramBot:
         """Handle /gua command (VIP & Super Admin Only)."""
         from_user = update.effective_user
         if not self._is_vip_or_admin(from_user.id):
-            await self._send_vip_required_notice(update.message, from_user.id)
+            await self._send_vip_required_notice(update, from_user.id)
             return
 
         args = context.args
         if not args or len(args) < 1:
             if not self._has_registered_profile(from_user.id):
-                await self._send_profile_required_notice(update.message, from_user.id)
+                await self._send_profile_required_notice(update, from_user.id)
                 return
 
-            text = (
-                "🧭 **របៀបគណនា Life Gua (San Yuan Ming Gua):**\n"
-                "សូមសរសេរ៖ `/gua <ឆ្នាំកំណើត> <ភេទ male/female>`\n"
-                "ឧទាហរណ៍៖ `/gua 1988 male` ឬ `/gua 1995 female`"
-            )
-            keyboard = [
-                [
-                    InlineKeyboardButton("👨 គណនាសម្រាប់បុរស (1988)", callback_data="calc_gua_1988_male"),
-                    InlineKeyboardButton("👩 គណនាសម្រាប់ស្ត្រី (1995)", callback_data="calc_gua_1995_female")
-                ],
-                [InlineKeyboardButton("🏠 ម៉ឺនុយដើម", callback_data="menu_main")]
-            ]
-            await self._safe_reply(update.message, text, reply_markup=InlineKeyboardMarkup(keyboard))
-            return
+            self_prof = self.db.get_self_profile(from_user.id)
+            if self_prof and self_prof.get("birth_date"):
+                try:
+                    dt = datetime.strptime(self_prof["birth_date"], "%Y-%m-%d")
+                    year = dt.year
+                    gender = self_prof.get("gender", "male")
+                    args = [str(year), gender]
+                except Exception:
+                    args = ["1990", "male"]
+            else:
+                args = ["1990", "male"]
 
         try:
             year = int(args[0])
@@ -1327,42 +1369,46 @@ class FengShuiTelegramBot:
                     [InlineKeyboardButton("📚 រៀនក្បួន Life Gua (មេរៀន ១៧)", callback_data="curr_les_161")],
                     [InlineKeyboardButton("🏠 ម៉ឺនុយដើម", callback_data="menu_main")]
                 ]
-                await self._safe_reply(update.message, msg, reply_markup=InlineKeyboardMarkup(keyboard))
+                await self._safe_reply(update, msg, reply_markup=InlineKeyboardMarkup(keyboard))
                 asyncio.create_task(self._notify_admin_qa_interaction(
                     context, from_user, f"/gua {year} {gender}", msg, service_type="🧭 គណនា Life Gua"
                 ))
             else:
-                await self._safe_reply(update.message, f"❌ កំហុស៖ {res.get('error')}")
+                await self._safe_reply(update, f"❌ កំហុស៖ {res.get('error')}")
         except Exception as e:
-            await self._safe_reply(update.message, f"❌ កំហុសក្នុងការគណនា៖ {str(e)}")
+            await self._safe_reply(update, f"❌ កំហុសក្នុងការគណនា៖ {str(e)}")
 
     async def flyingstars_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /flyingstars command (VIP & Super Admin Only)."""
         from_user = update.effective_user
         if not self._is_vip_or_admin(from_user.id):
-            await self._send_vip_required_notice(update.message, from_user.id)
+            await self._send_vip_required_notice(update, from_user.id)
             return
         if not self._has_registered_profile(from_user.id):
-            await self._send_profile_required_notice(update.message, from_user.id)
+            await self._send_profile_required_notice(update, from_user.id)
             return
 
-        year = 2024
+        year = datetime.now().year
         res = self.calc_engine.calculate_flying_stars(year)
         if res["success"]:
             d = res["data"]
             grid = d["grid"]
+            center_entry = grid.get("CENTER") or grid.get("Center", {})
+            center_star_num = center_entry.get("star_number", 1)
+            details = center_entry.get("details", {})
+            center_star_name = details.get("kh") or details.get("name") or center_entry.get("star_name", "")
             msg = (
                 f"🌌 **តារាហោះ ៩ វិហារ យុគ ៩ (Period 9: 2024-2043)**\n"
                 f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-                f"• **យុគបច្ចុប្បន្ន:** {d['period']} (Li Fire ធាតុភ្លើង)\n"
-                f"• **ផ្កាយកណ្តាលឆ្នាំ {d['year']}:** {d['center_star']['number']} ({d['center_star']['name']})\n\n"
+                f"• **យុគបច្ចុប្បន្ន:** {d['period']} ({d['period_element']})\n"
+                f"• **ផ្កាយកណ្តាលឆ្នាំ {d['year']}:** {center_star_num} ({center_star_name})\n\n"
                 f"🗺️ **ប្លង់តារាហោះ ៩ វិហារ (Luo Shu Nine Palaces):**\n"
                 f"┌──────┬──────┬──────┐\n"
-                f"│ SE:{grid['SE']['star_number']} │ S:{grid['S']['star_number']}  │ SW:{grid['SW']['star_number']} │\n"
+                f"│ SE:{grid.get('SE', {}).get('star_number', '')} │ S:{grid.get('S', {}).get('star_number', '')}  │ SW:{grid.get('SW', {}).get('star_number', '')} │\n"
                 f"├──────┼──────┼──────┤\n"
-                f"│ E:{grid['E']['star_number']}  │ C:{grid['Center']['star_number']}  │ W:{grid['W']['star_number']}  │\n"
+                f"│ E:{grid.get('E', {}).get('star_number', '')}  │ C:{center_star_num}  │ W:{grid.get('W', {}).get('star_number', '')}  │\n"
                 f"├──────┼──────┼──────┤\n"
-                f"│ NE:{grid['NE']['star_number']} │ N:{grid['N']['star_number']}  │ NW:{grid['NW']['star_number']} │\n"
+                f"│ NE:{grid.get('NE', {}).get('star_number', '')} │ N:{grid.get('N', {}).get('star_number', '')}  │ NW:{grid.get('NW', {}).get('star_number', '')} │\n"
                 f"└──────┴──────┴──────┘\n\n"
                 f"🌟 **ទិសស្រូបទ្រព្យយុគ ៩:** ខាងជើង N (Ling Shen Water 零神) & ខាងត្បូង S (Zheng Shen Mountain 正神)\n"
                 f"⚠️ **ទិសគ្រោះធំប្រចាំឆ្នាំ:** ខាងលិច W (Star 5 Yellow 廉贞) & អាគ្នេយ៍ SE (Star 2 Black 巨门)"
@@ -1371,76 +1417,77 @@ class FengShuiTelegramBot:
                 [InlineKeyboardButton("📚 រៀនក្បួនតារាហោះ យុគ ៩ (មេរៀន ២៣)", callback_data="curr_les_221")],
                 [InlineKeyboardButton("🏠 ម៉ឺនុយដើម", callback_data="menu_main")]
             ]
-            await self._safe_reply(update.message, msg, reply_markup=InlineKeyboardMarkup(keyboard))
+            await self._safe_reply(update, msg, reply_markup=InlineKeyboardMarkup(keyboard))
             asyncio.create_task(self._notify_admin_qa_interaction(
                 context, from_user, f"/flyingstars {year}", msg, service_type="🌌 តារាហោះ យុគ ៩"
             ))
         else:
-            await self._safe_reply(update.message, f"❌ កំហុស៖ {res.get('error')}")
+            await self._safe_reply(update, f"❌ កំហុស៖ {res.get('error')}")
 
     async def bazi_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /bazi command (VIP & Super Admin Only)."""
         from_user = update.effective_user
         if not self._is_vip_or_admin(from_user.id):
-            await self._send_vip_required_notice(update.message, from_user.id)
+            await self._send_vip_required_notice(update, from_user.id)
             return
+
         args = context.args
         if not args or len(args) < 1:
             if not self._has_registered_profile(from_user.id):
-                await self._send_profile_required_notice(update.message, from_user.id)
+                await self._send_profile_required_notice(update, from_user.id)
                 return
 
-            text = (
-                "🔮 **របៀបវិភាគ BaZi សសរស្តម្ភទាំង ៤:**\n"
-                "សូមសរសេរ៖ `/bazi YYYY-MM-DD [HH:MM]`\n"
-                "ឧទាហរណ៍៖ `/bazi 1988-05-15 10:30` ឬ `/bazi 1990-08-20`"
-            )
-            keyboard = [
-                [InlineKeyboardButton("🔮 ឧទាហរណ៍គំរូ BaZi (1988-05-15)", callback_data="calc_bazi_demo")],
-                [InlineKeyboardButton("🏠 ម៉ឺនុយដើម", callback_data="menu_main")]
-            ]
-            await self._safe_reply(update.message, text, reply_markup=InlineKeyboardMarkup(keyboard))
-            return
+            self_prof = self.db.get_self_profile(from_user.id)
+            if self_prof and self_prof.get("birth_date"):
+                dt_str = self_prof["birth_date"]
+                time_str = self_prof.get("birth_time", "12:00")
+            else:
+                dt_str = "1990-05-15"
+                time_str = "12:00"
+        else:
+            dt_str = args[0]
+            time_str = args[1] if len(args) > 1 else "12:00"
 
-        dt_str = args[0]
-        time_str = args[1] if len(args) > 1 else "12:00"
-        res = self.calc_engine.calculate_bazi(f"{dt_str} {time_str}")
+        res = self.calc_engine.calculate_bazi(dt_str, time_str)
         if res["success"]:
             d = res["data"]
-            pillars = d["four_pillars"]
+            pillars = d.get("pillars", {})
+            dm = d.get("day_master", {})
+            elem_counts = d.get("five_elements_count", {})
+            elem_str = " | ".join([f"{k}: {v}" for k, v in elem_counts.items()])
             msg = (
                 f"🔮 **លទ្ធផល BaZi ៤ សសរស្តម្ភ (FS-Classical-Calc-v1)**\n"
                 f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-                f"📅 **កាលបរិច្ឆេទ:** {d['solar_date']}\n"
-                f"👑 **Day Master (ធាតុខ្លួនឯង):** **{d['day_master']['stem']} {d['day_master']['element']} ({d['day_master']['polarity']})**\n"
-                f"💊 **ធាតុឱសថគាំទ្រ (Yong Shen):** {d['favorable_elements']}\n\n"
+                f"📅 **កាលបរិច្ឆេទ:** `{d['birth_date']}` ម៉ោង `{d['birth_time']}`\n"
+                f"👑 **Day Master (ធាតុខ្លួនឯង):** **{dm.get('stem', '')} - {dm.get('element', '')}**\n"
+                f"✨ **លក្ខណៈពិសេស:** {dm.get('nature', '')}\n\n"
                 f"🏛️ **សសរស្តម្ភទាំង ៤ (Four Pillars Matrix):**\n"
-                f"• **ឆ្នាំ (Year):** {pillars['year']['stem']} {pillars['year']['branch']} ({pillars['year']['element']})\n"
-                f"• **ខែ (Month):** {pillars['month']['stem']} {pillars['month']['branch']} ({pillars['month']['element']})\n"
-                f"• **ថ្ងៃ (Day):** {pillars['day']['stem']} {pillars['day']['branch']} ({pillars['day']['element']})\n"
-                f"• **ម៉ោង (Hour):** {pillars['hour']['stem']} {pillars['hour']['branch']} ({pillars['hour']['element']})\n\n"
-                f"⚖️ **តុល្យភាពធាតុទាំង ៥ ក្នុងខ្លួន:**\n"
-                f"ឈើ:{d['elements_distribution']['Wood']} | ភ្លើង:{d['elements_distribution']['Fire']} | ដី:{d['elements_distribution']['Earth']} | លោហៈ:{d['elements_distribution']['Metal']} | ទឹក:{d['elements_distribution']['Water']}"
+                f"• **ឆ្នាំ (Year):** `{pillars.get('year', {}).get('ganzhi', '')}` - {pillars.get('year', {}).get('meaning', '')}\n"
+                f"• **ខែ (Month):** `{pillars.get('month', {}).get('ganzhi', '')}` - {pillars.get('month', {}).get('meaning', '')}\n"
+                f"• **ថ្ងៃ (Day):** `{pillars.get('day', {}).get('ganzhi', '')}` - {pillars.get('day', {}).get('meaning', '')}\n"
+                f"• **ម៉ោង (Hour):** `{pillars.get('time', {}).get('ganzhi', '')}` - {pillars.get('time', {}).get('meaning', '')}\n\n"
+                f"⚖️ **តុល្យភាពធាតុទាំង ៥ ក្នុងខ្លួន:**\n{elem_str}\n\n"
+                f"💡 **ដំបូន្មានតុល្យភាពធាតុ:** {d.get('recommendation', '')}"
             )
             keyboard = [
                 [InlineKeyboardButton("📚 រៀនក្បួន BaZi (មេរៀន ៨១)", callback_data="curr_les_801")],
                 [InlineKeyboardButton("🏠 ម៉ឺនុយដើម", callback_data="menu_main")]
             ]
-            await self._safe_reply(update.message, msg, reply_markup=InlineKeyboardMarkup(keyboard))
+            await self._safe_reply(update, msg, reply_markup=InlineKeyboardMarkup(keyboard))
             asyncio.create_task(self._notify_admin_qa_interaction(
                 context, from_user, f"/bazi {dt_str} {time_str}", msg, service_type="🔮 វិភាគ BaZi ៤ សសរ"
             ))
         else:
-            await self._safe_reply(update.message, f"❌ កំហុស៖ {res.get('error')}")
+            await self._safe_reply(update, f"❌ កំហុស៖ {res.get('error')}")
 
     async def predict_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /predict command (VIP & Super Admin Only)."""
         from_user = update.effective_user
         if not self._is_vip_or_admin(from_user.id):
-            await self._send_vip_required_notice(update.message, from_user.id)
+            await self._send_vip_required_notice(update, from_user.id)
             return
         if not self._has_registered_profile(from_user.id):
-            await self._send_profile_required_notice(update.message, from_user.id)
+            await self._send_profile_required_notice(update, from_user.id)
             return
 
         args = context.args
@@ -1469,7 +1516,7 @@ class FengShuiTelegramBot:
                 [InlineKeyboardButton("💬 សួរពិគ្រោះបន្ថែម", callback_data="menu_ask")],
                 [InlineKeyboardButton("🏠 ម៉ឺនុយដើម", callback_data="menu_main")]
             ]
-            await self._safe_reply(update.message, msg, reply_markup=InlineKeyboardMarkup(keyboard))
+            await self._safe_reply(update, msg, reply_markup=InlineKeyboardMarkup(keyboard))
             asyncio.create_task(self._notify_admin_qa_interaction(
                 context, from_user, f"/predict {date_str}", msg, service_type="📊 ទស្សន៍ទាយសំណាងប្រចាំថ្ងៃ"
             ))
@@ -1478,37 +1525,44 @@ class FengShuiTelegramBot:
         """Handle /love and /mahasneh command for 8-Pillars Peach Blossom & Universal Zenith Love Analysis."""
         from_user = update.effective_user
         if not self._is_vip_or_admin(from_user.id):
-            await self._send_vip_required_notice(update.message, from_user.id)
+            await self._send_vip_required_notice(update, from_user.id)
             return
         if not self._has_registered_profile(from_user.id):
-            await self._send_profile_required_notice(update.message, from_user.id)
+            await self._send_profile_required_notice(update, from_user.id)
             return
 
         args = context.args
         if not args:
-            guide_text = (
-                "💖 **ក្បួនហុងស៊ុយ និងមហាស្នេហ៍ (Peach Blossom & 8-Pillars Love Zenith)** 💖\n"
-                "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-                "🌟 **របៀបប្រើប្រាស់ពាក្យបញ្ជាដើម្បីវិភាគក្បួនមហាស្នេហ៍៖**\n\n"
-                "1️⃣ **វិភាគទាក់ទាញស្នេហាផ្ទាល់ខ្លួន (Peach Blossom Star):**\n"
-                "`/love <YYYY-MM-DD> <male/female>`\n"
-                "👉 **ឧទាហរណ៍៖** `/love 1990-05-15 male`\n\n"
-                "2️⃣ **វិភាគភាពស៊ីចង្វាក់ស្នេហាគូស្នេហ៍ (៨ សសរស្តម្ភ BaZi Compatibility):**\n"
-                "`/love <ថ្ងៃខែឆ្នាំខ្លួនឯង> <ភេទ> <ថ្ងៃខែឆ្នាំគូស្នេហ៍> <ភេទ>`\n"
-                "👉 **ឧទាហរណ៍៖** `/love 1990-05-15 male 1992-08-20 female`\n\n"
-                "*(ប្រព័ន្ធនឹងបង្កើតរបាយការណ៍ Universal Zenith Report រួមមាន៖ ធាតុឱសថព្យាបាលរាសី, យុទ្ធសាស្ត្រអន្ទងចិត្ត, និងវិធីសាស្ត្របន្ទន់ចិត្ត!)*"
-            )
-            keyboard = [
-                [InlineKeyboardButton("💬 សួរគ្រូហុងស៊ុយ AI", callback_data="menu_ask")],
-                [InlineKeyboardButton("🏠 ម៉ឺនុយដើម", callback_data="menu_main")]
-            ]
-            await self._safe_reply(update.message, guide_text, reply_markup=InlineKeyboardMarkup(keyboard))
-            return
-
-        b_date_1 = args[0]
-        gender_1 = args[1] if len(args) > 1 else "male"
-        b_date_2 = args[2] if len(args) > 2 else None
-        gender_2 = args[3] if len(args) > 3 else "female"
+            self_prof = self.db.get_self_profile(from_user.id)
+            if self_prof and self_prof.get("birth_date"):
+                b_date_1 = self_prof["birth_date"]
+                gender_1 = self_prof.get("gender", "male")
+                b_date_2 = None
+                gender_2 = "female"
+            else:
+                guide_text = (
+                    "💖 **ក្បួនហុងស៊ុយ និងមហាស្នេហ៍ (Peach Blossom & 8-Pillars Love Zenith)** 💖\n"
+                    "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                    "🌟 **របៀបប្រើប្រាស់ពាក្យបញ្ជាដើម្បីវិភាគក្បួនមហាស្នេហ៍៖**\n\n"
+                    "1️⃣ **វិភាគទាក់ទាញស្នេហាផ្ទាល់ខ្លួន (Peach Blossom Star):**\n"
+                    "`/love <YYYY-MM-DD> <male/female>`\n"
+                    "👉 **ឧទាហរណ៍៖** `/love 1990-05-15 male`\n\n"
+                    "2️⃣ **វិភាគភាពស៊ីចង្វាក់ស្នេហាគូស្នេហ៍ (៨ សសរស្តម្ភ BaZi Compatibility):**\n"
+                    "`/love <ថ្ងៃខែឆ្នាំខ្លួនឯង> <ភេទ> <ថ្ងៃខែឆ្នាំគូស្នេហ៍> <ភេទ>`\n"
+                    "👉 **ឧទាហរណ៍៖** `/love 1990-05-15 male 1992-08-20 female`\n\n"
+                    "*(ប្រព័ន្ធនឹងបង្កើតរបាយការណ៍ Universal Zenith Report រួមមាន៖ ធាតុឱសថព្យាបាលរាសី, យុទ្ធសាស្ត្រអន្ទងចិត្ត, និងវិធីសាស្ត្របន្ទន់ចិត្ត!)*"
+                )
+                keyboard = [
+                    [InlineKeyboardButton("💬 សួរគ្រូហុងស៊ុយ AI", callback_data="menu_ask")],
+                    [InlineKeyboardButton("🏠 ម៉ឺនុយដើម", callback_data="menu_main")]
+                ]
+                await self._safe_reply(update, guide_text, reply_markup=InlineKeyboardMarkup(keyboard))
+                return
+        else:
+            b_date_1 = args[0]
+            gender_1 = args[1] if len(args) > 1 else "male"
+            b_date_2 = args[2] if len(args) > 2 else None
+            gender_2 = args[3] if len(args) > 3 else "female"
 
         res = self.love.analyze_love_profile(
             birth_date_1=b_date_1,
@@ -1518,7 +1572,7 @@ class FengShuiTelegramBot:
         )
 
         if not res.get("success"):
-            await self._safe_reply(update.message, f"❌ កំហុសក្នុងការវិភាគ៖ {res.get('error')}")
+            await self._safe_reply(update, f"❌ កំហុសក្នុងការវិភាគ៖ {res.get('error')}")
             return
 
         msg = res["zenith_report"]
@@ -1531,9 +1585,9 @@ class FengShuiTelegramBot:
             [InlineKeyboardButton("💬 ពិគ្រោះក្បួនស្នេហ៍លម្អិតជាមួយ AI", callback_data="menu_ask")],
             [InlineKeyboardButton("🏠 ម៉ឺនុយដើម", callback_data="menu_main")]
         ]
-        await self._safe_reply(update.message, msg, reply_markup=InlineKeyboardMarkup(keyboard))
+        await self._safe_reply(update, msg, reply_markup=InlineKeyboardMarkup(keyboard))
         asyncio.create_task(self._notify_admin_qa_interaction(
-            context, from_user, f"/love {' '.join(args)}", msg, service_type="💖 ក្បួនហុងស៊ុយ និងមហាស្នេហ៍"
+            context, from_user, f"/love {b_date_1} {gender_1}", msg, service_type="💖 ក្បួនហុងស៊ុយ និងមហាស្នេហ៍"
         ))
 
     # ==================== PILLAR 10 FAMILY SYNERGY & DATA COMMANDS ====================
@@ -1546,7 +1600,7 @@ class FengShuiTelegramBot:
         """
         from_user = update.effective_user
         if not self._is_vip_or_admin(from_user.id):
-            await self._send_vip_required_notice(update.message, from_user.id)
+            await self._send_vip_required_notice(update, from_user.id)
             return
 
         args = context.args or []
@@ -1581,7 +1635,7 @@ class FengShuiTelegramBot:
                     [InlineKeyboardButton("💬 សួរគ្រូហុងស៊ុយ AI", callback_data="menu_ask")],
                     [InlineKeyboardButton("🏠 ម៉ឺនុយដើម", callback_data="menu_main")]
                 ]
-                await self._safe_reply(update.message, guide_text, reply_markup=InlineKeyboardMarkup(keyboard))
+                await self._safe_reply(update, guide_text, reply_markup=InlineKeyboardMarkup(keyboard))
                 return
 
             # Generate Report
@@ -1596,7 +1650,7 @@ class FengShuiTelegramBot:
                     InlineKeyboardButton("🏠 ម៉ឺនុយដើម", callback_data="menu_main")
                 ]
             ]
-            await self._safe_reply(update.message, report, reply_markup=InlineKeyboardMarkup(keyboard))
+            await self._safe_reply(update, report, reply_markup=InlineKeyboardMarkup(keyboard))
             return
 
         # 2. Clear command
@@ -1607,7 +1661,7 @@ class FengShuiTelegramBot:
                 [InlineKeyboardButton("➕ បញ្ចូលទិន្នន័យជាថ្មី", callback_data="fam_add_prompt")],
                 [InlineKeyboardButton("🏠 ម៉ឺនុយដើម", callback_data="menu_main")]
             ]
-            await self._safe_reply(update.message, msg, reply_markup=InlineKeyboardMarkup(keyboard))
+            await self._safe_reply(update, msg, reply_markup=InlineKeyboardMarkup(keyboard))
             return
 
         # 3. Delete specific member
@@ -1623,7 +1677,7 @@ class FengShuiTelegramBot:
                 [InlineKeyboardButton("📜 មើលបញ្ជីគ្រួសារ", callback_data="fam_list")],
                 [InlineKeyboardButton("🏠 ម៉ឺនុយដើម", callback_data="menu_main")]
             ]
-            await self._safe_reply(update.message, msg, reply_markup=InlineKeyboardMarkup(keyboard))
+            await self._safe_reply(update, msg, reply_markup=InlineKeyboardMarkup(keyboard))
             return
 
         # 4. Parse adding a family member: /data <relation> <birth_date> [birth_time] [gender] [name]
@@ -1632,7 +1686,7 @@ class FengShuiTelegramBot:
             rel_type, rel_label, default_gender = self.family.parse_relation(rel_arg)
 
             if len(args) < 2:
-                await self._safe_reply(update.message, "❌ សូមបញ្ចូលថ្ងៃខែឆ្នាំកំណើត៖ `/data <តួនាទី> <YYYY-MM-DD> [HH:MM] [male/female]`")
+                await self._safe_reply(update, "❌ សូមបញ្ចូលថ្ងៃខែឆ្នាំកំណើត៖ `/data <តួនាទី> <YYYY-MM-DD> [HH:MM] [male/female]`")
                 return
 
             birth_date = args[1]
@@ -1687,14 +1741,14 @@ class FengShuiTelegramBot:
                     InlineKeyboardButton("🏠 ម៉ឺនុយដើម", callback_data="menu_main")
                 ]
             ]
-            await self._safe_reply(update.message, msg, reply_markup=InlineKeyboardMarkup(keyboard))
+            await self._safe_reply(update, msg, reply_markup=InlineKeyboardMarkup(keyboard))
             asyncio.create_task(self._notify_admin_qa_interaction(
                 context, from_user, f"/data {' '.join(args)}", msg, service_type="👨‍👩‍👧‍👦 កត់ត្រាទិន្នន័យគ្រួសារ"
             ))
 
         except Exception as e:
             logger.error(f"Error in data_command: {e}", exc_info=True)
-            await self._safe_reply(update.message, f"❌ កំហុសក្នុងការកត់ត្រាទិន្នន័យ៖ {str(e)}\n\n👉 គំរូត្រឹមត្រូវ: `/data ប្រពន្ធ 1992-08-20 14:00 female`")
+            await self._safe_reply(update, f"❌ កំហុសក្នុងការកត់ត្រាទិន្នន័យ៖ {str(e)}\n\n👉 គំរូត្រឹមត្រូវ: `/data ប្រពន្ធ 1992-08-20 14:00 female`")
 
     async def handle_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle conversational natural language messages with VIP limit & security enforcement."""
@@ -1827,7 +1881,7 @@ class FengShuiTelegramBot:
         except Exception as e:
             logger.error(f"Error handling photo upload: {e}", exc_info=True)
             await self._safe_reply(
-                update.message,
+                update,
                 f"❌ មានបញ្ហាក្នុងការទាញយករូបភាព៖ {e}\n👉 សូមព្យាយាមផ្ញើរូបភាពម្តងទៀត។"
             )
 
@@ -1835,12 +1889,12 @@ class FengShuiTelegramBot:
         """Handle /render3d command to generate and explore 3D 4K Feng Shui architectural spaces (VIP Only)."""
         from_user = update.effective_user
         if not self._is_vip_or_admin(from_user.id):
-            await self._send_vip_required_notice(update.message, from_user.id)
+            await self._send_vip_required_notice(update, from_user.id)
             return
         if not self._has_registered_profile(from_user.id):
-            await self._send_profile_required_notice(update.message, from_user.id)
+            await self._send_profile_required_notice(update, from_user.id)
             return
-        await self._send_render3d_menu(update.message, is_edit=False)
+        await self._send_render3d_menu(update, is_edit=False)
 
     async def _send_render3d_menu(self, message_or_query, is_edit: bool = False):
         """Render the 3D 4K Visualization menu."""
@@ -1874,12 +1928,12 @@ class FengShuiTelegramBot:
         """Handle /celestial or main celestial menu."""
         from_user = update.effective_user
         if not self._is_vip_or_admin(from_user.id):
-            await self._send_vip_required_notice(update.message, from_user.id)
+            await self._send_vip_required_notice(update, from_user.id)
             return
         if not self._has_registered_profile(from_user.id):
-            await self._send_profile_required_notice(update.message, from_user.id)
+            await self._send_profile_required_notice(update, from_user.id)
             return
-        await self._send_celestial_menu(update.message, is_edit=False)
+        await self._send_celestial_menu(update, is_edit=False)
 
     async def _send_celestial_menu(self, message_or_query, is_edit: bool = False):
         """Render Celestial Scheduler & Astrology Dashboard Menu."""
@@ -1916,7 +1970,7 @@ class FengShuiTelegramBot:
         """Handle /setbirth <YYYY-MM-DD> [HH:MM] [male/female]."""
         from_user = update.effective_user
         if not self._is_vip_or_admin(from_user.id):
-            await self._send_vip_required_notice(update.message, from_user.id)
+            await self._send_vip_required_notice(update, from_user.id)
             return
 
         args = context.args
@@ -1930,7 +1984,7 @@ class FengShuiTelegramBot:
                 "• `/setbirth 1992-08-20 14:00 female`\n\n"
                 "*(ព័ត៌មាននេះនឹងត្រូវបានរក្សាទុកដើម្បីគណនា និងផ្ញើសារ Alert រាសីប្រចាំថ្ងៃម៉ោង ៥ ព្រឹកស្វ័យប្រវត្តិកំពូល!)*"
             )
-            await self._safe_reply(update.message, guide)
+            await self._safe_reply(update, guide)
             return
 
         b_date = args[0]
@@ -1955,18 +2009,18 @@ class FengShuiTelegramBot:
                 [InlineKeyboardButton("🌅 មើលរាសីថ្ងៃនេះភ្លាមៗ", callback_data="cel_daily")],
                 [InlineKeyboardButton("🏠 ម៉ឺនុយដើម", callback_data="menu_main")]
             ]
-            await self._safe_reply(update.message, resp_msg, reply_markup=InlineKeyboardMarkup(keyboard))
+            await self._safe_reply(update, resp_msg, reply_markup=InlineKeyboardMarkup(keyboard))
         else:
-            await self._safe_reply(update.message, "❌ មិនអាចរក្សាទុកព័ត៌មានបានទេ។ សូមព្យាយាមម្តងទៀត។")
+            await self._safe_reply(update, "❌ មិនអាចរក្សាទុកព័ត៌មានបានទេ។ សូមព្យាយាមម្តងទៀត។")
 
     async def daily_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /daily or /horoscope command."""
         from_user = update.effective_user
         if not self._is_vip_or_admin(from_user.id):
-            await self._send_vip_required_notice(update.message, from_user.id)
+            await self._send_vip_required_notice(update, from_user.id)
             return
         if not self._has_registered_profile(from_user.id):
-            await self._send_profile_required_notice(update.message, from_user.id)
+            await self._send_profile_required_notice(update, from_user.id)
             return
 
         self_prof = self.db.get_self_profile(from_user.id) or {}
@@ -1985,7 +2039,7 @@ class FengShuiTelegramBot:
                 InlineKeyboardButton("🏠 ម៉ឺនុយដើម", callback_data="menu_main")
             ]
         ]
-        await self._safe_reply(update.message, report, reply_markup=InlineKeyboardMarkup(keyboard))
+        await self._safe_reply(update, report, reply_markup=InlineKeyboardMarkup(keyboard))
         asyncio.create_task(self._notify_admin_qa_interaction(
             context, from_user, f"/daily (Birth: {b_date} {b_time})", report, service_type="🌅 ហោរាសាស្ត្រប្រចាំថ្ងៃ (Daily)"
         ))
@@ -1994,10 +2048,10 @@ class FengShuiTelegramBot:
         """Handle /monthly command."""
         from_user = update.effective_user
         if not self._is_vip_or_admin(from_user.id):
-            await self._send_vip_required_notice(update.message, from_user.id)
+            await self._send_vip_required_notice(update, from_user.id)
             return
         if not self._has_registered_profile(from_user.id):
-            await self._send_profile_required_notice(update.message, from_user.id)
+            await self._send_profile_required_notice(update, from_user.id)
             return
 
         self_prof = self.db.get_self_profile(from_user.id) or {}
@@ -2013,7 +2067,7 @@ class FengShuiTelegramBot:
             ],
             [InlineKeyboardButton("🏠 ម៉ឺនុយដើម", callback_data="menu_main")]
         ]
-        await self._safe_reply(update.message, report, reply_markup=InlineKeyboardMarkup(keyboard))
+        await self._safe_reply(update, report, reply_markup=InlineKeyboardMarkup(keyboard))
         asyncio.create_task(self._notify_admin_qa_interaction(
             context, from_user, f"/monthly (Birth: {b_date} {b_time})", report, service_type="📅 ផែនទីរាសីប្រចាំខែ (Monthly)"
         ))
@@ -2022,10 +2076,10 @@ class FengShuiTelegramBot:
         """Handle /yearly command."""
         from_user = update.effective_user
         if not self._is_vip_or_admin(from_user.id):
-            await self._send_vip_required_notice(update.message, from_user.id)
+            await self._send_vip_required_notice(update, from_user.id)
             return
         if not self._has_registered_profile(from_user.id):
-            await self._send_profile_required_notice(update.message, from_user.id)
+            await self._send_profile_required_notice(update, from_user.id)
             return
 
         self_prof = self.db.get_self_profile(from_user.id) or {}
@@ -2041,7 +2095,7 @@ class FengShuiTelegramBot:
             ],
             [InlineKeyboardButton("🏠 ម៉ឺនុយដើម", callback_data="menu_main")]
         ]
-        await self._safe_reply(update.message, report, reply_markup=InlineKeyboardMarkup(keyboard))
+        await self._safe_reply(update, report, reply_markup=InlineKeyboardMarkup(keyboard))
         asyncio.create_task(self._notify_admin_qa_interaction(
             context, from_user, f"/yearly (Birth: {b_date} {b_time})", report, service_type="🎊 មហាសង្ក្រាន្តប្រចាំឆ្នាំ (Yearly)"
         ))
@@ -2050,7 +2104,7 @@ class FengShuiTelegramBot:
         """Handle /almanac or /tungshu command."""
         from_user = update.effective_user
         if not self._is_vip_or_admin(from_user.id):
-            await self._send_vip_required_notice(update.message, from_user.id)
+            await self._send_vip_required_notice(update, from_user.id)
             return
 
         almanac = self.celestial.calculate_global_almanac()
@@ -2084,18 +2138,18 @@ class FengShuiTelegramBot:
             ],
             [InlineKeyboardButton("🏠 ម៉ឺនុយដើម", callback_data="menu_main")]
         ]
-        await self._safe_reply(update.message, msg, reply_markup=InlineKeyboardMarkup(keyboard))
+        await self._safe_reply(update, msg, reply_markup=InlineKeyboardMarkup(keyboard))
 
     async def settimezone_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /settimezone or /tz [timezone_or_offset] (VIP Only)."""
         from_user = update.effective_user
         if not self._is_vip_or_admin(from_user.id):
-            await self._send_vip_required_notice(update.message, from_user.id)
+            await self._send_vip_required_notice(update, from_user.id)
             return
 
         args = context.args
         if not args or len(args) < 1:
-            await self._send_timezone_menu(update.message, is_edit=False)
+            await self._send_timezone_menu(update, is_edit=False)
             return
 
         tz_input = " ".join(args)
@@ -2118,7 +2172,7 @@ class FengShuiTelegramBot:
             ],
             [InlineKeyboardButton("🏠 ម៉ឺនុយដើម", callback_data="menu_main")]
         ]
-        await self._safe_reply(update.message, msg, reply_markup=InlineKeyboardMarkup(keyboard))
+        await self._safe_reply(update, msg, reply_markup=InlineKeyboardMarkup(keyboard))
 
     async def _send_timezone_menu(self, message_or_query, is_edit: bool = False):
         """Interactive Timezone Selector Menu with 1-click Country buttons."""
@@ -2878,15 +2932,164 @@ class FengShuiTelegramBot:
                 ])
                 await self._safe_edit(query, full_text, reply_markup=InlineKeyboardMarkup(keyboard))
 
-            # Demos
+            # Demos & Calculators
             elif data == "menu_gua":
-                await self.gua_command(update, context)
+                self_prof = self.db.get_self_profile(from_user.id)
+                if not self_prof and not (from_user.id in config.ADMIN_USER_IDS or self.db.get_or_create_user(from_user.id).get("role") == "super_admin"):
+                    await self._send_profile_required_notice(query, from_user.id)
+                    return
+                birth_date = (self_prof.get("birth_date") if self_prof else None) or "1990-05-15"
+                gender = (self_prof.get("gender") if self_prof else None) or "male"
+                try:
+                    dt = datetime.strptime(birth_date, "%Y-%m-%d")
+                    year = dt.year
+                except Exception:
+                    year = 1990
+                res = self.calc_engine.calculate_life_gua(year, gender)
+                if res["success"]:
+                    d = res["data"]
+                    lucky_str = "\n".join([f"• **{item['direction']}** ({item['type']}): {item['meaning']}" for item in d['lucky_directions']])
+                    unlucky_str = "\n".join([f"• **{item['direction']}** ({item['type']}): {item['meaning']}" for item in d['unlucky_directions']])
+                    msg = (
+                        f"🧭 **លទ្ធផល Life Gua (FS-Classical-Calc-v1)**\n"
+                        f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                        f"• **ឆ្នាំកំណើត:** {d['birth_year']} ({'បុរស' if d['gender'] == 'male' else 'ស្ត្រី'})\n"
+                        f"• **Gua លេខ:** {d['gua_number']} ({d['trigram_name']})\n"
+                        f"• **ធាតុ:** {d['element']}\n"
+                        f"• **ក្រុម:** {d['group']}\n\n"
+                        f"✨ **ទិសល្អទាំង ៤ (Auspicious Directions):**\n{lucky_str}\n\n"
+                        f"⚠️ **ទិសគួរជៀសវាងទាំង ៤ (Inauspicious Directions):**\n{unlucky_str}"
+                    )
+                    keyboard = [
+                        [InlineKeyboardButton("📚 រៀនក្បួន Life Gua (មេរៀន ១៧)", callback_data="curr_les_161")],
+                        [InlineKeyboardButton("🏠 ម៉ឺនុយដើម", callback_data="menu_main")]
+                    ]
+                    await self._safe_edit(query, msg, reply_markup=InlineKeyboardMarkup(keyboard))
+                else:
+                    await self._safe_edit(query, f"❌ កំហុស៖ {res.get('error')}")
+
+            elif data.startswith("calc_gua_"):
+                parts = data.split("_")
+                year = int(parts[2])
+                gender = parts[3]
+                res = self.calc_engine.calculate_life_gua(year, gender)
+                if res["success"]:
+                    d = res["data"]
+                    lucky_str = "\n".join([f"• **{item['direction']}** ({item['type']}): {item['meaning']}" for item in d['lucky_directions']])
+                    unlucky_str = "\n".join([f"• **{item['direction']}** ({item['type']}): {item['meaning']}" for item in d['unlucky_directions']])
+                    msg = (
+                        f"🧭 **លទ្ធផល Life Gua (FS-Classical-Calc-v1)**\n"
+                        f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                        f"• **ឆ្នាំកំណើត:** {d['birth_year']} ({'បុរស' if d['gender'] == 'male' else 'ស្ត្រី'})\n"
+                        f"• **Gua លេខ:** {d['gua_number']} ({d['trigram_name']})\n"
+                        f"• **ធាតុ:** {d['element']}\n"
+                        f"• **ក្រុម:** {d['group']}\n\n"
+                        f"✨ **ទិសល្អទាំង ៤ (Auspicious Directions):**\n{lucky_str}\n\n"
+                        f"⚠️ **ទិសគួរជៀសវាងទាំង ៤ (Inauspicious Directions):**\n{unlucky_str}"
+                    )
+                    keyboard = [
+                        [InlineKeyboardButton("📚 រៀនក្បួន Life Gua (មេរៀន ១៧)", callback_data="curr_les_161")],
+                        [InlineKeyboardButton("🏠 ម៉ឺនុយដើម", callback_data="menu_main")]
+                    ]
+                    await self._safe_edit(query, msg, reply_markup=InlineKeyboardMarkup(keyboard))
+                else:
+                    await self._safe_edit(query, f"❌ កំហុស៖ {res.get('error')}")
+
             elif data == "menu_flyingstars":
-                await self.flyingstars_command(update, context)
+                year = datetime.now().year
+                res = self.calc_engine.calculate_flying_stars(year)
+                if res["success"]:
+                    d = res["data"]
+                    grid = d["grid"]
+                    center_entry = grid.get("CENTER") or grid.get("Center", {})
+                    center_num = center_entry.get("star_number", 1)
+                    details = center_entry.get("details", {})
+                    center_name = details.get("kh") or details.get("name") or center_entry.get("star_name", "")
+                    msg = (
+                        f"🌌 **តារាហោះ ៩ វិហារ យុគ ៩ (Period 9: 2024-2043)**\n"
+                        f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                        f"• **យុគបច្ចុប្បន្ន:** {d['period']} ({d['period_element']})\n"
+                        f"• **ផ្កាយកណ្តាលឆ្នាំ {d['year']}:** {center_num} ({center_name})\n\n"
+                        f"🗺️ **ប្លង់តារាហោះ ៩ វិហារ (Luo Shu Nine Palaces):**\n"
+                        f"┌──────┬──────┬──────┐\n"
+                        f"│ SE:{grid.get('SE', {}).get('star_number', '')} │ S:{grid.get('S', {}).get('star_number', '')}  │ SW:{grid.get('SW', {}).get('star_number', '')} │\n"
+                        f"├──────┼──────┼──────┤\n"
+                        f"│ E:{grid.get('E', {}).get('star_number', '')}  │ C:{center_num}  │ W:{grid.get('W', {}).get('star_number', '')}  │\n"
+                        f"├──────┼──────┼──────┤\n"
+                        f"│ NE:{grid.get('NE', {}).get('star_number', '')} │ N:{grid.get('N', {}).get('star_number', '')}  │ NW:{grid.get('NW', {}).get('star_number', '')} │\n"
+                        f"└──────┴──────┴──────┘\n\n"
+                        f"🌟 **ទិសស្រូបទ្រព្យយុគ ៩:** ខាងជើង N (Ling Shen Water 零神) & ខាងត្បូង S (Zheng Shen Mountain 正神)\n"
+                        f"⚠️ **ទិសគ្រោះធំប្រចាំឆ្នាំ:** ខាងលិច W (Star 5 Yellow 廉贞) & អាគ្នេយ៍ SE (Star 2 Black 巨门)"
+                    )
+                    keyboard = [
+                        [InlineKeyboardButton("📚 រៀនក្បួនតារាហោះ យុគ ៩ (មេរៀន ២៣)", callback_data="curr_les_221")],
+                        [InlineKeyboardButton("🏠 ម៉ឺនុយដើម", callback_data="menu_main")]
+                    ]
+                    await self._safe_edit(query, msg, reply_markup=InlineKeyboardMarkup(keyboard))
+                else:
+                    await self._safe_edit(query, f"❌ កំហុស៖ {res.get('error')}")
+
             elif data == "menu_bazi":
-                await self.bazi_command(update, context)
+                self_prof = self.db.get_self_profile(from_user.id)
+                if not self_prof and not (from_user.id in config.ADMIN_USER_IDS or self.db.get_or_create_user(from_user.id).get("role") == "super_admin"):
+                    await self._send_profile_required_notice(query, from_user.id)
+                    return
+                dt_str = (self_prof.get("birth_date") if self_prof else None) or "1990-05-15"
+                time_str = (self_prof.get("birth_time") if self_prof else None) or "12:00"
+                res = self.calc_engine.calculate_bazi(dt_str, time_str)
+                if res["success"]:
+                    d = res["data"]
+                    pillars = d.get("pillars", {})
+                    dm = d.get("day_master", {})
+                    elem_counts = d.get("five_elements_count", {})
+                    elem_str = " | ".join([f"{k}: {v}" for k, v in elem_counts.items()])
+                    msg = (
+                        f"🔮 **លទ្ធផល BaZi ៤ សសរស្តម្ភ (FS-Classical-Calc-v1)**\n"
+                        f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                        f"📅 **កាលបរិច្ឆេទ:** `{d['birth_date']}` ម៉ោង `{d['birth_time']}`\n"
+                        f"👑 **Day Master (ធាតុខ្លួនឯង):** **{dm.get('stem', '')} - {dm.get('element', '')}**\n"
+                        f"✨ **លក្ខណៈពិសេស:** {dm.get('nature', '')}\n\n"
+                        f"🏛️ **សសរស្តម្ភទាំង ៤ (Four Pillars Matrix):**\n"
+                        f"• **ឆ្នាំ (Year):** `{pillars.get('year', {}).get('ganzhi', '')}` - {pillars.get('year', {}).get('meaning', '')}\n"
+                        f"• **ខែ (Month):** `{pillars.get('month', {}).get('ganzhi', '')}` - {pillars.get('month', {}).get('meaning', '')}\n"
+                        f"• **ថ្ងៃ (Day):** `{pillars.get('day', {}).get('ganzhi', '')}` - {pillars.get('day', {}).get('meaning', '')}\n"
+                        f"• **ម៉ោង (Hour):** `{pillars.get('time', {}).get('ganzhi', '')}` - {pillars.get('time', {}).get('meaning', '')}\n\n"
+                        f"⚖️ **តុល្យភាពធាតុទាំង ៥ ក្នុងខ្លួន:**\n{elem_str}\n\n"
+                        f"💡 **ដំបូន្មានតុល្យភាពធាតុ:** {d.get('recommendation', '')}"
+                    )
+                    keyboard = [
+                        [InlineKeyboardButton("📚 រៀនក្បួន BaZi (មេរៀន ៨១)", callback_data="curr_les_801")],
+                        [InlineKeyboardButton("🏠 ម៉ឺនុយដើម", callback_data="menu_main")]
+                    ]
+                    await self._safe_edit(query, msg, reply_markup=InlineKeyboardMarkup(keyboard))
+                else:
+                    await self._safe_edit(query, f"❌ កំហុស៖ {res.get('error')}")
+
             elif data == "menu_predict":
-                await self.predict_command(update, context)
+                today = datetime.now().strftime("%Y-%m-%d")
+                res = self.alert_engine.predict_fortune(today)
+                if res["success"]:
+                    d = res["data"]
+                    msg = (
+                        f"📊 **ការព្យាករណ៍ជោគជតារាសីប្រចាំថ្ងៃ (FS-Alert-Predictor)**\n"
+                        f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                        f"📅 **កាលបរិច្ឆេទ:** {d['query_date']} ({d['current_day_pillar']})\n"
+                        f"🌟 **សំណាងទូទៅ:** {d['overall_luck']['score']}% - {d['overall_luck']['level']}\n"
+                        f"💰 **សំណាងទ្រព្យ:** {d['wealth_luck']['score']}% ({d['wealth_luck']['advice']})\n"
+                        f"💼 **សំណាងអាជីព:** {d['career_luck']['score']}% ({d['career_luck']['advice']})\n"
+                        f"❤️ **សំណាងស្នេហា:** {d['love_luck']['score']}% ({d['love_luck']['advice']})\n"
+                        f"🌿 **សំណាងសុខភាព:** {d['health_luck']['score']}% ({d['health_luck']['advice']})\n\n"
+                        f"⏰ **ម៉ោងល្អក្នុងថ្ងៃនេះ:**\n" +
+                        "\n".join([f"• {h}" for h in d['auspicious_hours']]) +
+                        f"\n\n💡 **ដំបូន្មានប្រចាំថ្ងៃ:** {d['daily_remedy']}"
+                    )
+                    keyboard = [
+                        [InlineKeyboardButton("💬 សួរពិគ្រោះបន្ថែម", callback_data="menu_ask")],
+                        [InlineKeyboardButton("🏠 ម៉ឺនុយដើម", callback_data="menu_main")]
+                    ]
+                    await self._safe_edit(query, msg, reply_markup=InlineKeyboardMarkup(keyboard))
+                else:
+                    await self._safe_edit(query, f"❌ កំហុស៖ {res.get('error')}")
             elif data == "menu_ask":
                 await self._safe_edit(
                     query,
@@ -2985,9 +3188,14 @@ class FengShuiTelegramBot:
                             await self._safe_edit(query, f"❌ កំហុស៖ {res.get('error')}")
 
             elif data == "menu_health":
-                await self.health_command(update, context)
+                await self._send_health_view(query, is_edit=True)
             elif data == "menu_help":
-                await self.help_command(update, context)
+                help_text = self._build_help_text(from_user.id)
+                keyboard = [
+                    [InlineKeyboardButton("📚 កម្មវិធីសិក្សា ១០០០ មេរៀន", callback_data="menu_curriculum")],
+                    [InlineKeyboardButton("🏠 ម៉ឺនុយដើម", callback_data="menu_main")]
+                ]
+                await self._safe_edit(query, help_text, reply_markup=InlineKeyboardMarkup(keyboard))
         except Exception as err:
             logger.error(f"Error handling button callback {data}: {err}", exc_info=True)
             await self._safe_edit(
