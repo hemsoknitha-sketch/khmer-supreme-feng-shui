@@ -224,3 +224,61 @@ def explain_curriculum_lesson(lesson_id: int):
     if not result.get("success"):
         raise HTTPException(status_code=400, detail=result.get("error"))
     return result
+
+
+# =============================================================================
+# VIP & Admin Management API Endpoints
+# =============================================================================
+class RedeemRequest(BaseModel):
+    telegram_id: int
+    key: str
+
+
+class GenKeysRequest(BaseModel):
+    tier: str = Field(default="monthly", example="monthly")
+    count: int = Field(default=1, ge=1, le=20, example=5)
+    admin_id: int = Field(default=0)
+
+
+@app.post("/api/vip/redeem")
+def redeem_vip_license(req: RedeemRequest):
+    """Redeem a VIP license key via REST API."""
+    from database.db_manager import db_manager
+    res = db_manager.redeem_license(telegram_id=req.telegram_id, key=req.key)
+    if not res.get("success"):
+        raise HTTPException(status_code=400, detail=res.get("error"))
+    return res
+
+
+@app.get("/api/vip/status/{telegram_id}")
+def get_vip_status(telegram_id: int):
+    """Check VIP status and query balance for a user."""
+    from database.db_manager import db_manager
+    user = db_manager.get_or_create_user(telegram_id)
+    return {
+        "success": True,
+        "user": {
+            "telegram_id": user["telegram_id"],
+            "full_name": user["full_name"],
+            "role": user["role"],
+            "vip_tier": user["vip_tier"],
+            "vip_expiry": user["vip_expiry"],
+            "total_queries": user["total_queries"]
+        }
+    }
+
+
+@app.get("/api/admin/stats")
+def get_admin_system_stats():
+    """Retrieve live aggregate system, VIP, and license statistics."""
+    from database.db_manager import db_manager
+    stats = db_manager.get_system_stats()
+    return {"success": True, "data": stats}
+
+
+@app.post("/api/admin/genkeys")
+def generate_admin_keys(req: GenKeysRequest):
+    """Generate license keys via REST API."""
+    from database.db_manager import db_manager
+    keys = db_manager.generate_license_key(tier=req.tier, count=req.count, created_by=req.admin_id)
+    return {"success": True, "tier": req.tier, "count": len(keys), "keys": keys}

@@ -46,6 +46,11 @@ class SystemConfig:
     # Telegram Bot Token (supports both TELEGRAM_BOT_TOKEN and TELEGRAM_TOKEN)
     TELEGRAM_BOT_TOKEN: str = os.getenv("TELEGRAM_BOT_TOKEN") or os.getenv("TELEGRAM_TOKEN") or ""
 
+    # Super Admin Telegram User IDs (Comma-separated in .env: ADMIN_USER_IDS=1234567,7654321)
+    ADMIN_USER_IDS: List[int] = [
+        int(uid.strip()) for uid in os.getenv("ADMIN_USER_IDS", "").split(",") if uid.strip().isdigit()
+    ]
+
     # API Server Settings
     API_HOST: str = os.getenv("API_HOST", "0.0.0.0")
     API_PORT: int = int(os.getenv("API_PORT", "8000"))
@@ -54,6 +59,7 @@ class SystemConfig:
     MAX_RAM_MB: int = int(os.getenv("MAX_RAM_MB", "800"))
     ENABLE_LOCAL_CACHE: bool = os.getenv("ENABLE_LOCAL_CACHE", "true").lower() == "true"
     CACHE_EXPIRATION_HOURS: int = 24
+    MAX_FREE_DAILY_QUERIES: int = int(os.getenv("MAX_FREE_DAILY_QUERIES", "5"))
 
     # Feng Shui Classical Knowledge Constants
     FENGSHUI_SCHOOLS: List[str] = [
