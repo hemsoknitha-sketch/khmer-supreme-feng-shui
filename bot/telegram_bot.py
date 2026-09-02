@@ -1,8 +1,8 @@
 """
 Telegram Bot for Supreme Feng Shui AGI System
-Asynchronous, lightweight, and interactive bot powered by FS-Supreme-Master.
+Asynchronous, lightweight, and bulletproof interactive bot powered by FS-Supreme-Master.
 Features persistent native commands menu, full inline interactive keyboards,
-and an interactive 100-Topic & 1,000-Lesson Curriculum Learning Center.
+and an interactive 100-Topic & 1,000-Lesson Curriculum Learning Center with 7 Core Pillars.
 Runs 24/7 on Google Cloud VPS 1GB RAM.
 """
 
@@ -35,7 +35,7 @@ logger = logging.getLogger("SupremeFengShui.TelegramBot")
 
 
 class FengShuiTelegramBot:
-    """Production Super Smart Telegram Bot for Supreme Feng Shui System."""
+    """Production Bulletproof Telegram Bot for Supreme Feng Shui System."""
 
     def __init__(self, token: str = None):
         self.token = token or config.TELEGRAM_BOT_TOKEN
@@ -43,6 +43,25 @@ class FengShuiTelegramBot:
         self.calc_engine = ClassicalCalcEngine()
         self.alert_engine = AlertPredictionEngine()
         self.curriculum = curriculum_engine
+
+    async def _safe_reply(self, message, text: str, reply_markup=None):
+        """Safely send markdown text, automatically falling back to plain text if parsing fails."""
+        try:
+            return await message.reply_text(text, reply_markup=reply_markup, parse_mode="Markdown")
+        except Exception as e:
+            logger.debug(f"Markdown parse fallback for reply: {e}")
+            return await message.reply_text(text, reply_markup=reply_markup)
+
+    async def _safe_edit(self, query, text: str, reply_markup=None):
+        """Safely edit message text, automatically falling back to plain text if parsing fails."""
+        try:
+            return await query.edit_message_text(text, reply_markup=reply_markup, parse_mode="Markdown")
+        except Exception as e:
+            logger.debug(f"Markdown parse fallback for edit: {e}")
+            try:
+                return await query.edit_message_text(text, reply_markup=reply_markup)
+            except Exception as e2:
+                logger.warning(f"Could not edit message: {e2}")
 
     def _get_main_keyboard(self) -> InlineKeyboardMarkup:
         """Construct the rich main dashboard interactive keyboard."""
@@ -97,11 +116,7 @@ class FengShuiTelegramBot:
             "• 📊 **FS-Alert-Predictor**: ទស្សន៍ទាយជោគជតារាសីប្រចាំថ្ងៃ 0-100%\n\n"
             "👇 **សូមចុចប៊ូតុងខាងក្រោមដើម្បីចាប់ផ្តើមប្រើប្រាស់ភ្លាមៗ:**"
         )
-        await update.message.reply_text(
-            welcome_text,
-            reply_markup=self._get_main_keyboard(),
-            parse_mode="Markdown"
-        )
+        await self._safe_reply(update.message, welcome_text, reply_markup=self._get_main_keyboard())
 
     async def help_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /help command."""
@@ -122,7 +137,7 @@ class FengShuiTelegramBot:
             "6️⃣ **ពិគ្រោះយោបល់ជាមួយ AI Master:**\n"
             "• `/ask តើខ្ញុំគួររៀបចំបន្ទប់គេង និងតុធ្វើការយ៉ាងណាដើម្បីបង្កើនទ្រព្យ?`"
         )
-        await update.message.reply_text(help_text, reply_markup=self._get_main_keyboard(), parse_mode="Markdown")
+        await self._safe_reply(update.message, help_text, reply_markup=self._get_main_keyboard())
 
     async def curriculum_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /curriculum command."""
@@ -145,15 +160,15 @@ class FengShuiTelegramBot:
             InlineKeyboardButton("📖 រៀនមេរៀនទី ១ ភ្លាមៗ", callback_data="curr_les_1"),
             InlineKeyboardButton("🏠 ម៉ឺនុយដើម", callback_data="menu_main")
         ])
-        await update.message.reply_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="Markdown")
+        await self._safe_reply(update.message, text, reply_markup=InlineKeyboardMarkup(keyboard))
 
     async def learn_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /learn <lesson_id> command."""
         args = context.args
         if not args:
-            await update.message.reply_text(
-                "⚠️ សូមបញ្ជាក់លេខមេរៀនពី ១ ដល់ ១០០០ (ឧទាហរណ៍៖ `/learn 1` ឬ `/learn 23`)",
-                parse_mode="Markdown"
+            await self._safe_reply(
+                update.message,
+                "⚠️ សូមបញ្ជាក់លេខមេរៀនពី ១ ដល់ ១០០០ (ឧទាហរណ៍៖ `/learn 1` ឬ `/learn 23`)"
             )
             return
 
@@ -161,7 +176,7 @@ class FengShuiTelegramBot:
             lesson_id = int(args[0])
             await self._send_lesson_view(update.message, lesson_id)
         except ValueError:
-            await update.message.reply_text("❌ លេខមេរៀនមិនត្រឹមត្រូវ។ សូមបញ្ចូលលេខពី ១ ដល់ ១០០០។")
+            await self._safe_reply(update.message, "❌ លេខមេរៀនមិនត្រឹមត្រូវ។ សូមបញ្ចូលលេខពី ១ ដល់ ១០០០។")
 
     async def _send_lesson_view(self, message_or_query, lesson_id: int, is_edit: bool = False):
         """Render full lesson view with interactive Next/Previous and Deep Explain buttons."""
@@ -169,9 +184,9 @@ class FengShuiTelegramBot:
         if not lesson:
             text = f"❌ រកមិនឃើញមេរៀនទី {lesson_id} ឡើយ (មានត្រឹមមេរៀនទី ១ ដល់ ១០០០)។"
             if is_edit:
-                await message_or_query.edit_message_text(text)
+                await self._safe_edit(message_or_query, text)
             else:
-                await message_or_query.reply_text(text)
+                await self._safe_reply(message_or_query, text)
             return
 
         text = (
@@ -218,9 +233,9 @@ class FengShuiTelegramBot:
 
         reply_markup = InlineKeyboardMarkup(keyboard)
         if is_edit:
-            await message_or_query.edit_message_text(text, reply_markup=reply_markup, parse_mode="Markdown")
+            await self._safe_edit(message_or_query, text, reply_markup=reply_markup)
         else:
-            await message_or_query.reply_text(text, reply_markup=reply_markup, parse_mode="Markdown")
+            await self._safe_reply(message_or_query, text, reply_markup=reply_markup)
 
     async def gua_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /gua command."""
@@ -238,7 +253,7 @@ class FengShuiTelegramBot:
                 ],
                 [InlineKeyboardButton("🏠 ម៉ឺនុយដើម", callback_data="menu_main")]
             ]
-            await update.message.reply_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="Markdown")
+            await self._safe_reply(update.message, text, reply_markup=InlineKeyboardMarkup(keyboard))
             return
 
         try:
@@ -265,11 +280,11 @@ class FengShuiTelegramBot:
                     [InlineKeyboardButton("📚 រៀនក្បួន Life Gua (មេរៀន ១៧)", callback_data="curr_les_161")],
                     [InlineKeyboardButton("🏠 ម៉ឺនុយដើម", callback_data="menu_main")]
                 ]
-                await update.message.reply_text(msg, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="Markdown")
+                await self._safe_reply(update.message, msg, reply_markup=InlineKeyboardMarkup(keyboard))
             else:
-                await update.message.reply_text(f"❌ កំហុស៖ {res.get('error')}")
+                await self._safe_reply(update.message, f"❌ កំហុស៖ {res.get('error')}")
         except Exception as e:
-            await update.message.reply_text(f"❌ កំហុសក្នុងការគណនា៖ {str(e)}")
+            await self._safe_reply(update.message, f"❌ កំហុសក្នុងការគណនា៖ {str(e)}")
 
     async def flyingstars_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /flyingstars command."""
@@ -298,7 +313,7 @@ class FengShuiTelegramBot:
                 [InlineKeyboardButton("📚 រៀនក្បួនតារាហោះ យុគ ៩", callback_data="curr_les_221")],
                 [InlineKeyboardButton("🏠 ម៉ឺនុយដើម", callback_data="menu_main")]
             ]
-            await update.message.reply_text(msg, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="Markdown")
+            await self._safe_reply(update.message, msg, reply_markup=InlineKeyboardMarkup(keyboard))
 
     async def bazi_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /bazi command."""
@@ -313,7 +328,7 @@ class FengShuiTelegramBot:
                 [InlineKeyboardButton("🔮 តេស្ត BaZi (1988-05-15 10:30)", callback_data="calc_bazi_demo")],
                 [InlineKeyboardButton("🏠 ម៉ឺនុយដើម", callback_data="menu_main")]
             ]
-            await update.message.reply_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="Markdown")
+            await self._safe_reply(update.message, text, reply_markup=InlineKeyboardMarkup(keyboard))
             return
 
         date_str = args[0]
@@ -339,9 +354,9 @@ class FengShuiTelegramBot:
                 [InlineKeyboardButton("📚 រៀនក្បួន BaZi (មេរៀន ៨០១-១០០០)", callback_data="curr_cat_CAT4_p1")],
                 [InlineKeyboardButton("🏠 ម៉ឺនុយដើម", callback_data="menu_main")]
             ]
-            await update.message.reply_text(msg, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="Markdown")
+            await self._safe_reply(update.message, msg, reply_markup=InlineKeyboardMarkup(keyboard))
         else:
-            await update.message.reply_text(f"❌ កំហុស៖ {res.get('error')}")
+            await self._safe_reply(update.message, f"❌ កំហុស៖ {res.get('error')}")
 
     async def predict_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /predict command."""
@@ -356,7 +371,7 @@ class FengShuiTelegramBot:
                 [InlineKeyboardButton("📊 ទស្សន៍ទាយថ្ងៃនេះ", callback_data="calc_predict_demo")],
                 [InlineKeyboardButton("🏠 ម៉ឺនុយដើម", callback_data="menu_main")]
             ]
-            await update.message.reply_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="Markdown")
+            await self._safe_reply(update.message, text, reply_markup=InlineKeyboardMarkup(keyboard))
             return
 
         date_str = args[0]
@@ -380,7 +395,7 @@ class FengShuiTelegramBot:
                 [InlineKeyboardButton("💬 សួរពិគ្រោះបន្ថែម", callback_data="menu_ask")],
                 [InlineKeyboardButton("🏠 ម៉ឺនុយដើម", callback_data="menu_main")]
             ]
-            await update.message.reply_text(msg, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="Markdown")
+            await self._safe_reply(update.message, msg, reply_markup=InlineKeyboardMarkup(keyboard))
 
     async def handle_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle conversational natural language messages via SupremeFengShuiMaster."""
@@ -396,190 +411,203 @@ class FengShuiTelegramBot:
                 InlineKeyboardButton("🏠 ម៉ឺនុយដើម", callback_data="menu_main")
             ]
         ]
-        await update.message.reply_text(response_text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="Markdown")
+        await self._safe_reply(update.message, response_text, reply_markup=InlineKeyboardMarkup(keyboard))
 
     async def button_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle all interactive inline keyboard clicks seamlessly."""
         query = update.callback_query
-        await query.answer()
+        try:
+            await query.answer()
+        except Exception:
+            pass
+
         data = query.data
 
-        # Navigation: Main Menu
-        if data == "menu_main":
-            await query.edit_message_text(
-                "🌟 **SUPREME FENG SHUI AGI SYSTEM (Master Level v1.0.0)** 🌟\n"
-                "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-                "សូមជ្រើសរើសមុខងារដែលអ្នកចង់ប្រើប្រាស់៖",
-                reply_markup=self._get_main_keyboard(),
-                parse_mode="Markdown"
-            )
+        try:
+            # Navigation: Main Menu
+            if data == "menu_main":
+                await self._safe_edit(
+                    query,
+                    "🌟 **SUPREME FENG SHUI AGI SYSTEM (Master Level v1.0.0)** 🌟\n"
+                    "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                    "សូមជ្រើសរើសមុខងារដែលអ្នកចង់ប្រើប្រាស់៖",
+                    reply_markup=self._get_main_keyboard()
+                )
 
-        # Navigation: Curriculum Root
-        elif data == "menu_curriculum":
-            cats = self.curriculum.get_categories()
-            text = (
-                "📚 **កម្មវិធីសិក្សាហុងស៊ុយបុរាណ ១០០ ប្រធានបទ & ១០០០ មេរៀន**\n"
-                "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-                "សូមជ្រើសរើសផ្នែកដែលអ្នកចង់សិក្សា៖\n\n"
-                "☯️ **ផ្នែកទី ១:** មូលដ្ឋានគ្រឹះក្បួនហុងស៊ុយបុរាណ (មេរៀន ១-២០០)\n"
-                "🌌 **ផ្នែកទី ២:** ក្បួនជឿនលឿន & តារាហោះ យុគ ៩ (មេរៀន ២០១-៥០០)\n"
-                "🏛️ **ផ្នែកទី ៣:** ការអនុវត្តជាក់ស្តែង & លំនៅឋាន/អាជីវកម្ម (មេរៀន ៥០១-៨០០)\n"
-                "🔮 **ផ្នែកទី ៤:** ក្បួនឯកទេសជាន់ខ្ពស់ & BaZi រាសី (មេរៀន ៨០១-១០០០)"
-            )
-            keyboard = [
-                [InlineKeyboardButton(f"{c['icon']} {c['name_kh']}", callback_data=f"curr_cat_{c['id']}_p1")]
-                for c in cats
-            ]
-            keyboard.append([
-                InlineKeyboardButton("📖 រៀនមេរៀនទី ១", callback_data="curr_les_1"),
-                InlineKeyboardButton("🏠 ម៉ឺនុយដើម", callback_data="menu_main")
-            ])
-            await query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="Markdown")
-
-        # Category Topics List with Pagination
-        elif data.startswith("curr_cat_"):
-            parts = data.split("_")
-            cat_id = parts[2]
-            page = int(parts[3][1:]) if len(parts) > 3 else 1
-
-            topics = self.curriculum.get_topics(category_id=cat_id)
-            page_size = 5
-            total_pages = (len(topics) + page_size - 1) // page_size
-            page_topics = topics[(page - 1) * page_size: page * page_size]
-
-            cat_info = next((c for c in self.curriculum.get_categories() if c["id"] == cat_id), None)
-            text = (
-                f"📚 **{cat_info['icon'] if cat_info else '📚'} {cat_info['name_kh'] if cat_info else cat_id}**\n"
-                f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-                f"ទំព័រ {page}/{total_pages} (ប្រធានបទសរុប៖ {len(topics)})\n\n"
-                f"👇 **សូមជ្រើសរើសប្រធានបទដើម្បីមើលមេរៀនលម្អិត៖**"
-            )
-
-            keyboard = []
-            for t in page_topics:
+            # Navigation: Curriculum Root
+            elif data == "menu_curriculum":
+                cats = self.curriculum.get_categories()
+                text = (
+                    "📚 **កម្មវិធីសិក្សាហុងស៊ុយបុរាណ ១០០ ប្រធានបទ & ១០០០ មេរៀន**\n"
+                    "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                    "សូមជ្រើសរើសផ្នែកដែលអ្នកចង់សិក្សា៖\n\n"
+                    "☯️ **ផ្នែកទី ១:** មូលដ្ឋានគ្រឹះក្បួនហុងស៊ុយបុរាណ (មេរៀន ១-២០០)\n"
+                    "🌌 **ផ្នែកទី ២:** ក្បួនជឿនលឿន & តារាហោះ យុគ ៩ (មេរៀន ២០១-៥០០)\n"
+                    "🏛️ **ផ្នែកទី ៣:** ការអនុវត្តជាក់ស្តែង & លំនៅឋាន/អាជីវកម្ម (មេរៀន ៥០១-៨០០)\n"
+                    "🔮 **ផ្នែកទី ៤:** ក្បួនឯកទេសជាន់ខ្ពស់ & BaZi រាសី (មេរៀន ៨០១-១០០០)"
+                )
+                keyboard = [
+                    [InlineKeyboardButton(f"{c['icon']} {c['name_kh']}", callback_data=f"curr_cat_{c['id']}_p1")]
+                    for c in cats
+                ]
                 keyboard.append([
-                    InlineKeyboardButton(
-                        f"📌 ប្រធានបទ {t['topic_id']}: {t['name_kh']}",
-                        callback_data=f"curr_top_{t['topic_id']}"
-                    )
+                    InlineKeyboardButton("📖 រៀនមេរៀនទី ១", callback_data="curr_les_1"),
+                    InlineKeyboardButton("🏠 ម៉ឺនុយដើម", callback_data="menu_main")
                 ])
+                await self._safe_edit(query, text, reply_markup=InlineKeyboardMarkup(keyboard))
 
-            # Pagination row
-            nav_row = []
-            if page > 1:
-                nav_row.append(InlineKeyboardButton("⬅️ មុន", callback_data=f"curr_cat_{cat_id}_p{page-1}"))
-            if page < total_pages:
-                nav_row.append(InlineKeyboardButton("➡️ បន្ទាប់", callback_data=f"curr_cat_{cat_id}_p{page+1}"))
-            if nav_row:
-                keyboard.append(nav_row)
+            # Category Topics List with Pagination
+            elif data.startswith("curr_cat_"):
+                parts = data.split("_")
+                cat_id = parts[2]
+                page = int(parts[3][1:]) if len(parts) > 3 else 1
 
-            keyboard.append([
-                InlineKeyboardButton("📚 ត្រឡប់ទៅផ្នែកទាំង ៤", callback_data="menu_curriculum"),
-                InlineKeyboardButton("🏠 ម៉ឺនុយដើម", callback_data="menu_main")
-            ])
-            await query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="Markdown")
+                topics = self.curriculum.get_topics(category_id=cat_id)
+                page_size = 5
+                total_pages = max(1, (len(topics) + page_size - 1) // page_size)
+                page_topics = topics[(page - 1) * page_size: page * page_size]
 
-        # Topic Details & Sub-Lessons List
-        elif data.startswith("curr_top_"):
-            topic_id = int(data.split("_")[2])
-            topic = self.curriculum.get_topic(topic_id)
-            if not topic:
-                await query.edit_message_text("❌ រកមិនឃើញប្រធានបទនេះឡើយ។")
-                return
+                cat_info = next((c for c in self.curriculum.get_categories() if c["id"] == cat_id), None)
+                text = (
+                    f"📚 **{cat_info['icon'] if cat_info else '📚'} {cat_info['name_kh'] if cat_info else cat_id}**\n"
+                    f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                    f"ទំព័រ {page}/{total_pages} (ប្រធានបទសរុប៖ {len(topics)})\n\n"
+                    f"👇 **សូមជ្រើសរើសប្រធានបទដើម្បីមើលមេរៀនលម្អិត៖**"
+                )
 
-            text = (
-                f"📌 **ប្រធានបទទី {topic['topic_id']}: {topic['name_kh']}**\n"
-                f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-                f"🏷️ **ផ្នែក:** {topic['category_icon']} {topic['category_name']}\n"
-                f"📝 **ខ្លឹមសារ:** {topic['summary']}\n"
-                f"🔢 **មេរៀន:** ទី {topic['lesson_start']} ដល់ {topic['lesson_end']} (សរុប ១០ មេរៀន)\n\n"
-                f"👇 **សូមជ្រើសរើសមេរៀនដើម្បីអាន និងរៀនសូត្រ៖**"
-            )
+                keyboard = []
+                for t in page_topics:
+                    keyboard.append([
+                        InlineKeyboardButton(
+                            f"📌 ប្រធានបទ {t['topic_id']}: {t['name_kh']}",
+                            callback_data=f"curr_top_{t['topic_id']}"
+                        )
+                    ])
 
-            keyboard = []
-            for les in topic["lessons"]:
+                # Pagination row
+                nav_row = []
+                if page > 1:
+                    nav_row.append(InlineKeyboardButton("⬅️ មុន", callback_data=f"curr_cat_{cat_id}_p{page-1}"))
+                if page < total_pages:
+                    nav_row.append(InlineKeyboardButton("➡️ បន្ទាប់", callback_data=f"curr_cat_{cat_id}_p{page+1}"))
+                if nav_row:
+                    keyboard.append(nav_row)
+
                 keyboard.append([
-                    InlineKeyboardButton(
-                        f"📖 មេរៀន {les['lesson_id']}: {les['sub_topic_kh']}",
-                        callback_data=f"curr_les_{les['lesson_id']}"
-                    )
+                    InlineKeyboardButton("📚 ត្រឡប់ទៅផ្នែកទាំង ៤", callback_data="menu_curriculum"),
+                    InlineKeyboardButton("🏠 ម៉ឺនុយដើម", callback_data="menu_main")
                 ])
+                await self._safe_edit(query, text, reply_markup=InlineKeyboardMarkup(keyboard))
 
-            keyboard.append([
-                InlineKeyboardButton("🔙 ត្រឡប់ទៅបញ្ជីប្រធានបទ", callback_data=f"curr_cat_{topic['category_id']}_p1"),
-                InlineKeyboardButton("🏠 ម៉ឺនុយដើម", callback_data="menu_main")
-            ])
-            await query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="Markdown")
+            # Topic Details & Sub-Lessons List
+            elif data.startswith("curr_top_"):
+                topic_id = int(data.split("_")[2])
+                topic = self.curriculum.get_topic(topic_id)
+                if not topic:
+                    await self._safe_edit(query, "❌ រកមិនឃើញប្រធានបទនេះឡើយ។")
+                    return
 
-        # Individual Lesson View with Next / Prev
-        elif data.startswith("curr_les_"):
-            lesson_id = int(data.split("_")[2])
-            await self._send_lesson_view(query, lesson_id, is_edit=True)
+                text = (
+                    f"📌 **ប្រធានបទទី {topic['topic_id']}: {topic['name_kh']}**\n"
+                    f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                    f"🏷️ **ផ្នែក:** {topic['category_icon']} {topic['category_name']}\n"
+                    f"📝 **ខ្លឹមសារ:** {topic['summary']}\n"
+                    f"🔢 **មេរៀន:** ទី {topic['lesson_start']} ដល់ {topic['lesson_end']} (សរុប ១០ មេរៀន)\n\n"
+                    f"👇 **សូមជ្រើសរើសមេរៀនដើម្បីអាន និងរៀនសូត្រ៖**"
+                )
 
-        # Deep AI Explanation of Lesson
-        elif data.startswith("curr_exp_"):
-            lesson_id = int(data.split("_")[2])
-            lesson = self.curriculum.get_lesson(lesson_id)
-            if not lesson:
-                await query.edit_message_text("❌ រកមិនឃើញមេរៀន។")
-                return
+                keyboard = []
+                for les in topic["lessons"]:
+                    keyboard.append([
+                        InlineKeyboardButton(
+                            f"📖 មេរៀន {les['lesson_id']}: {les['sub_topic_kh']}",
+                            callback_data=f"curr_les_{les['lesson_id']}"
+                        )
+                    ])
 
-            await query.edit_message_text(
-                f"⏳ **កំពុងដំណើរការម៉ូដែល FS-Supreme-Master ដើម្បីពន្យល់មេរៀនទី {lesson_id}...**\n\n"
-                f"*(សូមរង់ចាំបន្តិច ប្រព័ន្ធកំពុងសំយោគក្បួនបុរាណ យុគទី ៩ ធាតុភ្លើង)*"
+                keyboard.append([
+                    InlineKeyboardButton("🔙 ត្រឡប់ទៅបញ្ជីប្រធានបទ", callback_data=f"curr_cat_{topic['category_id']}_p1"),
+                    InlineKeyboardButton("🏠 ម៉ឺនុយដើម", callback_data="menu_main")
+                ])
+                await self._safe_edit(query, text, reply_markup=InlineKeyboardMarkup(keyboard))
+
+            # Individual Lesson View with Next / Prev
+            elif data.startswith("curr_les_"):
+                lesson_id = int(data.split("_")[2])
+                await self._send_lesson_view(query, lesson_id, is_edit=True)
+
+            # Deep AI Explanation of Lesson
+            elif data.startswith("curr_exp_"):
+                lesson_id = int(data.split("_")[2])
+                lesson = self.curriculum.get_lesson(lesson_id)
+                if not lesson:
+                    await self._safe_edit(query, "❌ រកមិនឃើញមេរៀន។")
+                    return
+
+                await self._safe_edit(
+                    query,
+                    f"⏳ **កំពុងដំណើរការម៉ូដែល FS-Supreme-Master ដើម្បីពន្យល់មេរៀនទី {lesson_id}...**\n\n"
+                    f"*(សូមរង់ចាំបន្តិច ប្រព័ន្ធកំពុងសំយោគក្បួនបុរាណ យុគទី ៩ ធាតុភ្លើង)*"
+                )
+
+                # Generate deep explanation
+                res = self.curriculum.generate_deep_explanation(lesson_id)
+                exp_text = res.get("deep_explanation", "")
+
+                full_text = (
+                    f"🧠 **ការពន្យល់ស៊ីជម្រៅកម្រិតកំពូល (Master Level AI Synthesis)**\n"
+                    f"📚 **{lesson['title_kh']}**\n"
+                    f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                    f"{exp_text}\n\n"
+                    f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                    f"*(ប្រព័ន្ធបណ្តុះបណ្តាលដោយ 7 Core Pillars & LoRA Adapter)*"
+                )
+
+                nav_row = []
+                if lesson["prev_lesson_id"]:
+                    nav_row.append(InlineKeyboardButton("⬅️ មេរៀនមុន", callback_data=f"curr_les_{lesson['prev_lesson_id']}"))
+                if lesson["next_lesson_id"]:
+                    nav_row.append(InlineKeyboardButton("➡️ មេរៀនបន្ទាប់", callback_data=f"curr_les_{lesson['next_lesson_id']}"))
+
+                keyboard = []
+                if nav_row:
+                    keyboard.append(nav_row)
+                keyboard.append([
+                    InlineKeyboardButton("📖 អានសេចក្តីសង្ខេបមេរៀន", callback_data=f"curr_les_{lesson_id}"),
+                    InlineKeyboardButton("📑 មេរៀនក្នុងប្រធានបទ", callback_data=f"curr_top_{lesson['topic_id']}")
+                ])
+                keyboard.append([
+                    InlineKeyboardButton("🏠 ម៉ឺនុយដើម", callback_data="menu_main")
+                ])
+                await self._safe_edit(query, full_text, reply_markup=InlineKeyboardMarkup(keyboard))
+
+            # Interactive Calculation Quick Demos
+            elif data == "menu_gua":
+                await self.gua_command(update, context)
+            elif data == "menu_flyingstars":
+                await self.flyingstars_command(update, context)
+            elif data == "menu_bazi":
+                await self.bazi_command(update, context)
+            elif data == "menu_predict":
+                await self.predict_command(update, context)
+            elif data == "menu_ask":
+                await self._safe_edit(
+                    query,
+                    "💬 **សូមវាយសំណួររបស់អ្នកផ្ញើមកទីនេះដោយផ្ទាល់**\n\n"
+                    "ឧទាហរណ៍៖\n"
+                    "• *តើខ្ញុំគួររៀបចំបន្ទប់គេង និងតុធ្វើការយ៉ាងណាដើម្បីស្រូបទ្រព្យក្នុងយុគទី ៩?*\n"
+                    "• *ផ្ទះបែរមុខទៅទិសខាងត្បូង ១៨០ ដឺក្រេ តើល្អដែរឬទេ?*",
+                    reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🏠 ម៉ឺនុយដើម", callback_data="menu_main")]])
+                )
+            elif data == "menu_help":
+                await self.help_command(update, context)
+        except Exception as err:
+            logger.error(f"Error handling button callback {data}: {err}", exc_info=True)
+            await self._safe_edit(
+                query,
+                f"❌ មានបញ្ហាបន្តិចបន្តួចក្នុងការដំណើរការ៖ {err}",
+                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🏠 ម៉ឺនុយដើម", callback_data="menu_main")]])
             )
-
-            # Generate deep explanation
-            res = self.curriculum.generate_deep_explanation(lesson_id)
-            exp_text = res.get("deep_explanation", "")
-
-            full_text = (
-                f"🧠 **ការពន្យល់ស៊ីជម្រៅកម្រិតកំពូល (Master Level AI Synthesis)**\n"
-                f"📚 **{lesson['title_kh']}**\n"
-                f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
-                f"{exp_text}\n\n"
-                f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-                f"*(ប្រព័ន្ធបណ្តុះបណ្តាលដោយ 7 Core Pillars & LoRA Adapter)*"
-            )
-
-            nav_row = []
-            if lesson["prev_lesson_id"]:
-                nav_row.append(InlineKeyboardButton("⬅️ មេរៀនមុន", callback_data=f"curr_les_{lesson['prev_lesson_id']}"))
-            if lesson["next_lesson_id"]:
-                nav_row.append(InlineKeyboardButton("➡️ មេរៀនបន្ទាប់", callback_data=f"curr_les_{lesson['next_lesson_id']}"))
-
-            keyboard = []
-            if nav_row:
-                keyboard.append(nav_row)
-            keyboard.append([
-                InlineKeyboardButton("📖 អានសេចក្តីសង្ខេបមេរៀន", callback_data=f"curr_les_{lesson_id}"),
-                InlineKeyboardButton("📑 មេរៀនក្នុងប្រធានបទ", callback_data=f"curr_top_{lesson['topic_id']}")
-            ])
-            keyboard.append([
-                InlineKeyboardButton("🏠 ម៉ឺនុយដើម", callback_data="menu_main")
-            ])
-            await query.edit_message_text(full_text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="Markdown")
-
-        # Interactive Calculation Quick Demos
-        elif data == "menu_gua":
-            await self.gua_command(update, context)
-        elif data == "menu_flyingstars":
-            await self.flyingstars_command(update, context)
-        elif data == "menu_bazi":
-            await self.bazi_command(update, context)
-        elif data == "menu_predict":
-            await self.predict_command(update, context)
-        elif data == "menu_ask":
-            await query.edit_message_text(
-                "💬 **សូមវាយសំណួររបស់អ្នកផ្ញើមកទីនេះដោយផ្ទាល់**\n\n"
-                "ឧទាហរណ៍៖\n"
-                "• *តើខ្ញុំគួររៀបចំបន្ទប់គេង និងតុធ្វើការយ៉ាងណាដើម្បីស្រូបទ្រព្យក្នុងយុគទី ៩?*\n"
-                "• *ផ្ទះបែរមុខទៅទិសខាងត្បូង ១៨០ ដឺក្រេ តើល្អដែរឬទេ?*",
-                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🏠 ម៉ឺនុយដើម", callback_data="menu_main")]]),
-                parse_mode="Markdown"
-            )
-        elif data == "menu_help":
-            await self.help_command(update, context)
 
     def run(self):
         """Start the Telegram Bot polling daemon with native command registration."""
@@ -595,7 +623,7 @@ class FengShuiTelegramBot:
                 loop = asyncio.new_event_loop()
                 asyncio.set_event_loop(loop)
 
-            logger.info("Starting Super Smart Telegram Bot Application...")
+            logger.info("Starting Bulletproof Telegram Bot Application...")
             app = Application.builder().token(self.token).post_init(self.post_init).build()
 
             app.add_handler(CommandHandler("start", self.start_command))
@@ -610,7 +638,7 @@ class FengShuiTelegramBot:
             app.add_handler(CallbackQueryHandler(self.button_callback))
             app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, self.handle_message))
 
-            logger.info("Telegram Bot polling started successfully with full 1000-lesson matrix.")
+            logger.info("Telegram Bot polling started successfully with bulletproof resilience.")
             app.run_polling(stop_signals=None, close_loop=False)
         except Exception as e:
             logger.error(f"Telegram Bot error: {e}", exc_info=True)
