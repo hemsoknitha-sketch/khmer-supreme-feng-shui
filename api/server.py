@@ -238,16 +238,29 @@ def analyze_chronos(year: int):
 def consult_ai(req: ConsultRequest):
     """
     Primary MoE consultation endpoint combining calculations, embeddings,
-    and FS-Boramey-7B / FS-Reasoner-7B generation.
+    and FS-Boramey-7B / FS-Reasoner-7B generation with Enterprise Security Shield.
     """
-    return master.consult(
-        query=req.query,
+    from engines.security_guard import security_guard
+
+    # 1. Sanitize input & block prompt injection / attacks
+    clean_query, is_safe, threat_reason = security_guard.sanitize_user_input(req.query)
+    if not is_safe:
+        raise HTTPException(status_code=400, detail=f"Security Shield Triggered: {threat_reason}")
+
+    res = master.consult(
+        query=clean_query,
         birth_date=req.birth_date,
         birth_time=req.birth_time,
         gender=req.gender,
         house_degree=req.house_degree,
         complex_reasoning=req.complex_reasoning
     )
+
+    # 2. Redact sensitive secrets from output
+    if "synthesis" in res and isinstance(res["synthesis"], str):
+        res["synthesis"] = security_guard.redact_secrets(res["synthesis"])
+
+    return res
 
 
 @app.get("/api/curriculum/categories")

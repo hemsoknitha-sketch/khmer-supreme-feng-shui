@@ -32,11 +32,14 @@ class SecurityGuard:
         self.MAX_REQUESTS_PER_10_SECONDS = 6
         self.BLOCK_DURATION_SECONDS = 300  # 5 minutes temporary cooldown
 
-        # Sensitive Regex Patterns to Redact
+        # Sensitive Regex Patterns to Redact (Zero Secret Leakage)
         self._secret_patterns = [
-            re.compile(r"bot[0-9]{8,10}:[a-zA-Z0-9_-]{35}", re.IGNORECASE),  # Telegram Token
-            re.compile(r"hf_[a-zA-Z0-9]{34,40}", re.IGNORECASE),             # HuggingFace Token
-            re.compile(r"sk-[a-zA-Z0-9]{40,60}", re.IGNORECASE),             # OpenAI/Standard API Keys
+            re.compile(r"(?:bot)?[0-9]{8,12}:[a-zA-Z0-9_-]{30,50}", re.IGNORECASE),  # Telegram Token
+            re.compile(r"hf_[a-zA-Z0-9]{30,50}", re.IGNORECASE),                    # HuggingFace Token
+            re.compile(r"sk-[a-zA-Z0-9_-]{30,80}", re.IGNORECASE),                  # OpenAI Keys
+            re.compile(r"sk-ant-[a-zA-Z0-9_-]{30,100}", re.IGNORECASE),             # Anthropic Keys
+            re.compile(r"AQ\.[a-zA-Z0-9_-]{30,80}", re.IGNORECASE),                 # Gemini / Vertex Token
+            re.compile(r"AIza[0-9A-Za-z-_]{35}", re.IGNORECASE),                    # Google / Gemini API Keys
             re.compile(r"password\s*[:=]\s*['\"][^'\"]+['\"]", re.IGNORECASE),
             re.compile(r"ADMIN_USER_IDS\s*=\s*[0-9,]+", re.IGNORECASE),
         ]
