@@ -232,6 +232,9 @@ class TestSupremeFengShuiSystem(unittest.TestCase):
         members_b = db_manager.get_family_members(user_b)
         self.assertEqual(len(members_a), 2, "User A must have 2 family members.")
         self.assertEqual(len(members_b), 1, "User B must have 1 family member.")
+        self.assertEqual(members_a[0]["life_gua"], 3, "1988 Male must be Gua 3.")
+        self.assertEqual(members_a[1]["life_gua"], 8, "1990 Female must be Gua 8.")
+        self.assertEqual(members_b[0]["life_gua"], 6, "1995-01-01 Male (solar 1994) must be Gua 6.")
 
         # Verify Synergy Analysis
         analysis_a = family_synergy_engine.analyze_family_synergy(members_a)
@@ -291,6 +294,16 @@ class TestSupremeFengShuiSystem(unittest.TestCase):
         birth_date = "1990-05-15"
         birth_time = "10:30"
         gender = "male"
+
+        precision = celestial.calculate_precision_bazi(birth_date, birth_time, gender)
+        self.assertTrue(precision["success"])
+        self.assertEqual(precision["day_master"]["element"], "Metal")
+        self.assertIn("ធាតុដីដើម្បីការពារនិងពង្រឹង", precision["useful_god"])
+
+        from engines.mahasneh_love_engine import mahasneh_love_engine
+        love_p = mahasneh_love_engine.analyze_love_profile("1990-05-15", "male", "1992-08-20", "female")
+        self.assertEqual(love_p["element_1"], "Metal")
+        self.assertEqual(love_p["remedy"], "Remedy for Metal")
 
         d_report = celestial.generate_daily_celestial_report(birth_date, birth_time, gender)
         m_report = celestial.generate_monthly_celestial_report(birth_date, birth_time, gender)
@@ -413,6 +426,457 @@ class TestSupremeFengShuiSystem(unittest.TestCase):
         res_bazi = bot.calc_engine.calculate_bazi("1990-05-15", "12:00")
         self.assertTrue(res_bazi["success"])
         self.assertIn("pillars", res_bazi["data"])
+
+    # 19. Test Xuan Kong 24 Mountains Natal Chart Engine (Period 9 & Period 8 Formations)
+    def test_19_xuan_kong_24_mountains_natal_chart(self):
+        """Verify 24 Mountains Xuan Kong Natal Chart, Three Dragons, Ti Gua, and Castle Gate."""
+        # 1. Period 9 Sitting North (Zi 0°), Facing South (Wu 180°)
+        res_p9 = self.calc_engine.calculate_house_flying_stars(facing_degree=180.0, period=9)
+        self.assertTrue(res_p9["success"])
+        data_p9 = res_p9["data"]
+        self.assertEqual(data_p9["period"], 9)
+        self.assertEqual(data_p9["sitting"]["mountain"], "子")
+        self.assertEqual(data_p9["sitting"]["palace"], "N")
+        self.assertEqual(data_p9["facing"]["mountain"], "午")
+        self.assertEqual(data_p9["facing"]["palace"], "S")
+        self.assertFalse(data_p9["is_ti_gua"])
+        self.assertIn("下卦", data_p9["chart_mode"])
+
+        # Check flight dynamics
+        dynamics = data_p9["flight_dynamics"]
+        self.assertEqual(dynamics["mountain_star_center"], 5)
+        self.assertIn("逆飞", dynamics["mountain_star_flight"])
+        self.assertEqual(dynamics["water_star_center"], 4)
+        self.assertIn("顺飞", dynamics["water_star_flight"])
+
+        # Check Sitting Palace (N): Mountain Star = 9, Water Star = 9 (Double 9 at Sitting)
+        sitting_natal = data_p9["natal_chart"]["N"]
+        self.assertEqual(sitting_natal["mountain_star"], 9)
+        self.assertEqual(sitting_natal["water_star"], 9)
+
+        # Formations detection
+        formation_codes = [f["code"] for f in data_p9["formations"]]
+        self.assertIn("SHUANG_XING_DAO_ZUO", formation_codes)
+
+        # 2. Period 8 Sitting Chou (30° NE), Facing Wei (210° SW) -> Wang Shan Wang Xiang
+        res_p8 = self.calc_engine.calculate_house_flying_stars(sitting_degree=30.0, period=8)
+        self.assertTrue(res_p8["success"])
+        data_p8 = res_p8["data"]
+        p8_codes = [f["code"] for f in data_p8["formations"]]
+        self.assertIn("WANG_SHAN_WANG_XIANG", p8_codes)
+        self.assertIn("HE_SHI_10", p8_codes)
+        self.assertEqual(data_p8["natal_chart"]["NE"]["mountain_star"], 8)
+        self.assertEqual(data_p8["natal_chart"]["SW"]["water_star"], 8)
+
+        # 3. Ti Gua boundary replacement test (> 4.5° off mountain center)
+        res_ti = self.calc_engine.calculate_house_flying_stars(facing_degree=186.0, period=9)
+        self.assertTrue(res_ti["success"])
+        self.assertTrue(res_ti["data"]["is_ti_gua"])
+        self.assertIn("替卦", res_ti["data"]["chart_mode"])
+
+        # 4. Castle Gate verification
+        castle_gates = data_p9["castle_gates"]
+        self.assertEqual(castle_gates["facing_palace"], "S")
+        self.assertIn("left_castle_gate", castle_gates)
+        self.assertIn("right_castle_gate", castle_gates)
+
+        # 5. Ling Shen / Zheng Shen Period 9 verification
+        zero_spirit = data_p9["ling_shen_zheng_shen"]
+        self.assertIn("ខាងត្បូង", zero_spirit["zheng_shen"])
+        self.assertIn("ខាងជើង", zero_spirit["ling_shen"])
+
+    # 20. Test House Flying Stars REST API Endpoint
+    def test_20_house_flying_stars_api_endpoint(self):
+        """Verify /api/calculate/house-flying-stars endpoint handler."""
+        from api.server import calculate_house_flying_stars, HouseFlyingStarsRequest
+
+        req = HouseFlyingStarsRequest(
+            facing_degree=180.0,
+            period=9
+        )
+        res = calculate_house_flying_stars(req)
+        self.assertTrue(res["success"])
+        self.assertIn("natal_chart", res["data"])
+        self.assertIn("formations", res["data"])
+        self.assertIn("castle_gates", res["data"])
+        self.assertEqual(res["data"]["period"], 9)
+
+    # 21. Test BaZi Mathematical Precision (JDN, Wu Hu Dun, Wu Shu Dun, Li Chun, Cang Gan)
+    def test_21_bazi_mathematical_precision(self):
+        """Verify astronomical JDN, Five Tigers, Five Rats, and Li Chun cutoff in BaZi."""
+        # 1. Historical Anchor: 2000-01-01 12:00 -> 己卯 丙子 戊午 戊午
+        res_2000 = self.calc_engine.calculate_bazi("2000-01-01", "12:00")
+        self.assertTrue(res_2000["success"])
+        p_2000 = res_2000["data"]["pillars"]
+        self.assertEqual(p_2000["year"]["ganzhi"], "己卯")
+        self.assertEqual(p_2000["month"]["ganzhi"], "丙子")
+        self.assertEqual(p_2000["day"]["ganzhi"], "戊午")
+        self.assertEqual(p_2000["time"]["ganzhi"], "戊午")
+        self.assertEqual(res_2000["data"]["day_master"]["stem"], "戊")
+
+        # 2. Historical Anchor: 1988-05-15 10:30 -> 戊辰 丁巳 庚午 辛巳
+        res_1988 = self.calc_engine.calculate_bazi("1988-05-15", "10:30")
+        self.assertTrue(res_1988["success"])
+        p_1988 = res_1988["data"]["pillars"]
+        self.assertEqual(p_1988["year"]["ganzhi"], "戊辰")
+        self.assertEqual(p_1988["month"]["ganzhi"], "丁巳")
+        self.assertEqual(p_1988["day"]["ganzhi"], "庚午")
+        self.assertEqual(p_1988["time"]["ganzhi"], "辛巳")
+        self.assertEqual(res_1988["data"]["day_master"]["stem"], "庚")
+        self.assertIn("戊", p_1988["year"]["hidden_stems"])
+        self.assertIn("丙", p_1988["month"]["hidden_stems"])
+
+        # 3. Li Chun boundary in 2024 (Feb 4):
+        # Feb 3 (Before Li Chun) belongs to 2023 癸卯 year, 乙丑 month
+        res_before = self.calc_engine.calculate_bazi("2024-02-03", "12:00")
+        self.assertEqual(res_before["data"]["pillars"]["year"]["ganzhi"], "癸卯")
+        self.assertEqual(res_before["data"]["pillars"]["month"]["ganzhi"], "乙丑")
+
+        # Feb 5 (After Li Chun) belongs to 2024 甲辰 year, 丙寅 month
+        res_after = self.calc_engine.calculate_bazi("2024-02-05", "12:00")
+        self.assertEqual(res_after["data"]["pillars"]["year"]["ganzhi"], "甲辰")
+        self.assertEqual(res_after["data"]["pillars"]["month"]["ganzhi"], "丙寅")
+
+        # 4. Five Rats Seeking Hour (五鼠遁元) test
+        # Day Geng (庚) -> 00:00 is 丙子, 12:00 is 壬午, 18:00 is 乙酉
+        res_zi = self.calc_engine.calculate_bazi("1988-05-15", "00:00")
+        self.assertEqual(res_zi["data"]["pillars"]["time"]["ganzhi"], "丙子")
+        res_wu = self.calc_engine.calculate_bazi("1988-05-15", "12:00")
+        self.assertEqual(res_wu["data"]["pillars"]["time"]["ganzhi"], "壬午")
+        res_you = self.calc_engine.calculate_bazi("1988-05-15", "18:00")
+        self.assertEqual(res_you["data"]["pillars"]["time"]["ganzhi"], "乙酉")
+
+    # 22. Test Tung Shu Almanac Precision (Day Stem offset & 12 Day Officers)
+    def test_22_tung_shu_almanac_precision(self):
+        """Verify Day Stem offset and 12 Day Officers (Dong Gong Ze Ri) in Tung Shu."""
+        from datetime import date
+        from engines.celestial_astrology_engine import CelestialAstrologyEngine
+
+        celestial = CelestialAstrologyEngine()
+
+        # 1. Reference Date: 2000-01-01 must be Wu-Wu (戊午), NOT Jia-Wu (甲午)
+        alm_2000 = celestial.calculate_global_almanac(date(2000, 1, 1))
+        self.assertEqual(alm_2000["day_ganzhi"], "戊午")
+        # In Month Zi (Rat), Day Wu (Horse) clashes -> 破 (Po / ថ្ងៃបំបែក)
+        self.assertEqual(alm_2000["day_officer"]["name"], "ថ្ងៃបំបែក")
+
+        # 2. Date: 1988-05-15 must be Geng-Wu (庚午)
+        alm_1988 = celestial.calculate_global_almanac(date(1988, 5, 15))
+        self.assertEqual(alm_1988["day_ganzhi"], "庚午")
+        # In Month Si (Snake), Day Wu (Horse) is Chu (除 / ថ្ងៃកម្ចាត់)
+        self.assertEqual(alm_1988["day_officer"]["name"], "ថ្ងៃកម្ចាត់")
+
+        # 3. Date: 2026-09-03 (Today) must be Geng-Chen (庚辰)
+        alm_today = celestial.calculate_global_almanac(date(2026, 9, 3))
+        self.assertEqual(alm_today["day_ganzhi"], "庚辰")
+        # In Month Shen (Monkey), Day Chen (Dragon) is Cheng (成 / ថ្ងៃជោគជ័យ)
+        self.assertEqual(alm_today["day_officer"]["name"], "ថ្ងៃជោគជ័យ")
+
+    # 23. Test Life Gua Astronomical Li Chun Cutoff Precision
+    def test_23_life_gua_li_chun_precision(self):
+        """Verify Li Chun solar term cutoff for Life Gua (1990-01-15 vs 1990-05-15, etc.)."""
+        # 1. Male born 1990-01-15 (Before Li Chun Feb 4) -> 1989 solar year -> Gua 2 Kun (West Group)
+        g_m_bef = self.calc_engine.calculate_life_gua(birth_year="1990-01-15", gender="male")
+        self.assertTrue(g_m_bef["success"])
+        self.assertEqual(g_m_bef["data"]["solar_year"], 1989)
+        self.assertTrue(g_m_bef["data"]["is_before_li_chun"])
+        self.assertEqual(g_m_bef["data"]["gua_number"], 2)
+        self.assertEqual(g_m_bef["data"]["trigram"], "Kun")
+        self.assertFalse(g_m_bef["data"]["is_east_group"])
+        self.assertIn("1989", g_m_bef["data"]["li_chun_note"])
+
+        # 2. Male born 1990-05-15 (After Li Chun) -> 1990 solar year -> Gua 1 Kan (East Group)
+        g_m_aft = self.calc_engine.calculate_life_gua(birth_year=1990, gender="male", birth_date="1990-05-15")
+        self.assertTrue(g_m_aft["success"])
+        self.assertEqual(g_m_aft["data"]["solar_year"], 1990)
+        self.assertFalse(g_m_aft["data"]["is_before_li_chun"])
+        self.assertEqual(g_m_aft["data"]["gua_number"], 1)
+        self.assertEqual(g_m_aft["data"]["trigram"], "Kan")
+        self.assertTrue(g_m_aft["data"]["is_east_group"])
+
+        # 3. Female born 1990-01-15 (Before Li Chun) -> 1989 solar year -> Gua 4 Xun (East Group)
+        g_f_bef = self.calc_engine.calculate_life_gua(birth_year="1990-01-15", gender="female")
+        self.assertEqual(g_f_bef["data"]["solar_year"], 1989)
+        self.assertEqual(g_f_bef["data"]["gua_number"], 4)
+        self.assertEqual(g_f_bef["data"]["trigram"], "Xun")
+        self.assertTrue(g_f_bef["data"]["is_east_group"])
+
+        # 4. Female born 1990-05-15 (After Li Chun) -> 1990 solar year -> Gua 8 Gen (West Group, 5->8)
+        g_f_aft = self.calc_engine.calculate_life_gua(birth_year=1990, gender="female", birth_date="1990-05-15")
+        self.assertEqual(g_f_aft["data"]["solar_year"], 1990)
+        self.assertEqual(g_f_aft["data"]["gua_number"], 8)
+        self.assertEqual(g_f_aft["data"]["trigram"], "Gen")
+        self.assertFalse(g_f_aft["data"]["is_east_group"])
+
+        # 5. 2024 Cutoff: 2024-02-03 (Gua 4) vs 2024-02-05 (Gua 3) for Male
+        g_24_bef = self.calc_engine.calculate_life_gua(2024, "male", birth_date="2024-02-03")
+        self.assertEqual(g_24_bef["data"]["solar_year"], 2023)
+        self.assertEqual(g_24_bef["data"]["gua_number"], 4)
+
+        g_24_aft = self.calc_engine.calculate_life_gua(2024, "male", birth_date="2024-02-05")
+        self.assertEqual(g_24_aft["data"]["solar_year"], 2024)
+        self.assertEqual(g_24_aft["data"]["gua_number"], 3)
+
+        # 6. API Endpoint check (/api/calculate/gua with birth_date)
+        from api.server import calculate_gua, LifeGuaRequest
+        req = LifeGuaRequest(birth_year=1990, gender="male", birth_date="1990-01-15")
+        api_res = calculate_gua(req)
+        self.assertTrue(api_res["success"])
+        self.assertEqual(api_res["data"]["gua_number"], 2)
+        self.assertEqual(api_res["data"]["solar_year"], 1989)
+
+    # 24. Test Software Engineering Audit Fixes (Dependencies, Flying Stars Params, Gemini 404 Resilience, Web Form)
+    def test_24_software_engineering_audit(self):
+        """Verify Software Engineering Audit fixes across system components."""
+        # 1. Dependency: lunar_python is installed and functional
+        import lunar_python
+        from lunar_python import Solar, Lunar
+        self.assertIsNotNone(Solar)
+        self.assertIsNotNone(Lunar)
+
+        # 2. Flying Stars API Endpoint accepts house_degree / facing_mountain / period
+        from api.server import calculate_flying_stars, FlyingStarsRequest
+        # A: house_degree + period
+        req_deg = FlyingStarsRequest(year=2026, house_degree=180.0, period=9)
+        res_deg = calculate_flying_stars(req_deg)
+        self.assertTrue(res_deg["success"])
+        self.assertIn("house_natal_chart", res_deg["data"])
+        self.assertEqual(res_deg["data"]["house_natal_chart"]["period"], 9)
+        self.assertEqual(res_deg["data"]["house_natal_chart"]["facing"]["mountain"], "午")
+
+        # B: facing_mountain + period
+        req_mtn = FlyingStarsRequest(year=2026, facing_mountain="子", period=9)
+        res_mtn = calculate_flying_stars(req_mtn)
+        self.assertTrue(res_mtn["success"])
+        self.assertIn("house_natal_chart", res_mtn["data"])
+        self.assertEqual(res_mtn["data"]["house_natal_chart"]["facing"]["mountain"], "子")
+
+        # 3. Omni AI Mesh Gemini 404 Resilience test
+        from engines.omni_ai_bridge import GeminiMultiKeyPool
+        pool = GeminiMultiKeyPool(key_pool=["test_dummy_key"])
+        # Should gracefully return None without unhandled 404 crash
+        res_pool = pool.generate_content("Sys instruction", "User query")
+        self.assertIsNone(res_pool)
+
+        # 4. Web index.html contains guaDateInput type=date for Li Chun
+        import pathlib
+        html_content = pathlib.Path("web/index.html").read_text(encoding="utf-8")
+        self.assertIn('id="guaDateInput"', html_content)
+        self.assertIn('type="date"', html_content)
+
+    # 25. Test Extended Metaphysics Standards & Engineering Integrity
+    def test_25_extended_metaphysics_and_engineering_integrity(self):
+        """Verify 28 Lunar Mansions alignment, Monthly Flying Stars, and unified Li Chun across engines."""
+        from datetime import date
+        from engines.celestial_astrology_engine import CelestialAstrologyEngine
+        from engines.family_synergy_engine import FamilySynergyEngine
+        from engines.mahasneh_love_engine import MahaSnehLoveEngine
+
+        # 1. Verify 28 Lunar Mansions (28 Xiu) Calibration
+        celestial = CelestialAstrologyEngine()
+        almanac_2000 = celestial.calculate_global_almanac(date(2000, 1, 1))
+        # 2000-01-01 was 胃 (Wei - index 16)
+        self.assertIn("តារាវេយធូជី", almanac_2000["constellation"])
+
+        almanac_today = celestial.calculate_global_almanac(date(2026, 9, 3))
+        # 2026-09-03 was 奎 (Kui - index 14)
+        self.assertIn("តារាគុយម៉ុកឡាង", almanac_today["constellation"])
+
+        # 2. Verify Xuan Kong Monthly Flying Star calculation
+        # Year 2026 (Horse 午, Group 1 -> Starts at 8, Month 9 You -> Star 1)
+        month_res = self.calc_engine.calculate_flying_stars(2026, month=9)
+        self.assertTrue(month_res["success"])
+        self.assertEqual(month_res["data"]["monthly_center_star"], 1)
+        self.assertIn("monthly_grid", month_res["data"])
+        self.assertIn("NW", month_res["data"]["monthly_danger_palaces"])  # 5 in NW
+        self.assertIn("S", month_res["data"]["monthly_danger_palaces"])   # 2 in S
+
+        # 3. Verify FamilySynergyEngine exact Li Chun handling
+        fam_engine = FamilySynergyEngine()
+        # Born 1990-01-15 -> Before Li Chun -> Belongs to 1989 (Snake)
+        prof_bef = fam_engine.calculate_member_profile("1990-01-15", gender="male")
+        self.assertEqual(prof_bef["zodiac_animal"], "Snake")
+        # Born 1990-05-15 -> After Li Chun -> Belongs to 1990 (Horse)
+        prof_aft = fam_engine.calculate_member_profile("1990-05-15", gender="male")
+        self.assertEqual(prof_aft["zodiac_animal"], "Horse")
+
+        # 4. Verify MahaSnehLoveEngine exact Li Chun handling
+        love_engine = MahaSnehLoveEngine()
+        solar_bef = love_engine._get_solar_year("1990-01-15")
+        self.assertEqual(solar_bef, 1989)
+        solar_aft = love_engine._get_solar_year("1990-05-15")
+        self.assertEqual(solar_aft, 1990)
+
+    # 26. Test Vision Audit API Endpoint
+    def test_26_vision_audit_api_endpoint(self):
+        """Verify that /api/vision/audit accepts base64 image data and returns structured audit."""
+        from api.server import audit_floor_plan_image, VisionAuditBase64Request
+        dummy_png = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="
+        req = VisionAuditBase64Request(image_base64=dummy_png, mime_type="image/png", user_notes="Living room")
+        res = audit_floor_plan_image(req)
+        self.assertTrue(res["success"])
+        self.assertIn("audit_report", res)
+        self.assertGreaterEqual(len(res["audit_report"]), 3500)
+
+    # 27. Test Family CRUD Endpoints
+    def test_27_family_crud_endpoints(self):
+        """Verify POST, GET, and DELETE /api/family/member endpoints."""
+        from api.server import add_or_update_family_member, get_family_profile, delete_family_member, FamilyMemberRequest, DeleteFamilyMemberRequest
+        test_uid = 999888777
+        req_add = FamilyMemberRequest(telegram_id=test_uid, relation="spouse", birth_date="1992-06-15", name="TestingSpouse")
+        res_add = add_or_update_family_member(req_add)
+        self.assertTrue(res_add["success"])
+
+        res_get = get_family_profile(test_uid)
+        self.assertTrue(res_get["success"])
+        self.assertGreaterEqual(res_get["count"], 1)
+
+        req_del = DeleteFamilyMemberRequest(telegram_id=test_uid, relation_type="spouse", name="TestingSpouse")
+        res_del = delete_family_member(req_del)
+        self.assertTrue(res_del["success"])
+
+    # 28. Test Zenith Master Metaphysics and Software Engineering Standards (7 Points Audit)
+    def test_28_zenith_master_metaphysics_and_engineering_audit(self):
+        """Verify all 7 Classical Metaphysics & Software Engineering audit points."""
+        from datetime import date
+        from engines.celestial_astrology_engine import CelestialAstrologyEngine
+        from database.db_manager import get_db_connection
+
+        calc = self.calc_engine
+        celestial = CelestialAstrologyEngine()
+
+        # 1. TI_GUA_MAP has all 24 mountains including 戌: 6
+        self.assertEqual(len(calc.TI_GUA_MAP), 24)
+        self.assertIn("戌", calc.TI_GUA_MAP)
+        self.assertEqual(calc.TI_GUA_MAP["戌"], 6)
+
+        # 2. Authentic Tung Shu Almanac Directions for 2000-01-01 (戊午)
+        almanac_2000 = celestial.calculate_global_almanac(date(2000, 1, 1))
+        # Day Stem 戊 -> Wealth God North (正北), Joy God Southeast (东南)
+        self.assertIn("ខាងជើង (正北)", almanac_2000["auspicious_directions"]["wealth_god"])
+        self.assertIn("អាគ្នេយ៍ (东南)", almanac_2000["auspicious_directions"]["joy_god"])
+        # Day Branch 午 -> San Sha North (煞北)
+        self.assertIn("ខាងជើង (煞北)", almanac_2000["auspicious_directions"]["inauspicious_dir"])
+
+        # 3. Castle Gate with Home Palace Polarity
+        # Sitting 0° North (Kan), Facing 180° South (Li - Wu 午, Tian Dragon) in Period 9
+        res_house = calc.calculate_house_flying_stars(sitting_degree=0.0, period=9)
+        self.assertTrue(res_house["success"])
+        self.assertIn("castle_gates", res_house["data"])
+        cg = res_house["data"]["castle_gates"]
+        self.assertIn("left_castle_gate", cg)
+        self.assertIn("right_castle_gate", cg)
+
+        # 4. Da Kong Wang (大空亡) vs Xiao Kong Wang (小空亡)
+        # Degree 22.0° is within 1.5° of 22.5° (border between Kan and Gen) -> Da Kong Wang
+        res_dkw = calc.calculate_house_flying_stars(sitting_degree=22.0, period=9)
+        self.assertTrue(res_dkw["data"]["is_da_kong_wang"])
+        self.assertEqual(res_dkw["data"]["formations"][0]["code"], "DA_KONG_WANG")
+
+        # 5. Formation Detection for Fu Mu San Ban Gua, Lian Zhu San Ban Gua, Fu Yin, Fan Yin
+        # Mock natal chart for Fu Mu San Ban Gua (all palaces have 1-4-7, 2-5-8, or 3-6-9)
+        mock_fu_mu = {
+            p: {"mountain_star": 1, "period_star": 4, "water_star": 7} for p in calc.LO_SHU_PATH
+        }
+        forms_fu_mu = calc._detect_xuan_kong_formations(mock_fu_mu, 9, "N", "S")
+        self.assertTrue(any(f["code"] == "FU_MU_SAN_BAN_GUA" for f in forms_fu_mu))
+
+        # Mock natal chart for Lian Zhu San Ban Gua (consecutive 1-2-3)
+        mock_lian_zhu = {
+            p: {"mountain_star": 1, "period_star": 2, "water_star": 3} for p in calc.LO_SHU_PATH
+        }
+        forms_lian_zhu = calc._detect_xuan_kong_formations(mock_lian_zhu, 9, "N", "S")
+        self.assertTrue(any(f["code"] == "LIAN_ZHU_SAN_BAN_GUA" for f in forms_lian_zhu))
+
+        # 6. SQLite WAL Mode busy_timeout = 15000
+        with get_db_connection() as conn:
+            row = conn.execute("PRAGMA busy_timeout;").fetchone()
+            self.assertEqual(row[0], 15000)
+
+    # 29. Test Annual Afflictions Calculation (Tai Sui, Sui Po, San Sha, Wu Huang)
+    def test_29_annual_afflictions_calculation(self):
+        """Verify Grand Annual Afflictions (四大年煞) across multiple years."""
+        calc = self.calc_engine
+
+        # 2026: Year of Horse (丙午)
+        # Tai Sui at 午 (S2), Sui Po at 子 (N2), San Sha at North (亥, 子, 丑), Wu Huang at South
+        aff_2026 = calc.calculate_annual_afflictions(2026)
+        self.assertEqual(aff_2026["tai_sui"]["mountain"], "午")
+        self.assertEqual(aff_2026["sui_po"]["mountain"], "子")
+        self.assertEqual(aff_2026["san_sha"]["sector"], "N")
+        self.assertEqual(aff_2026["san_sha"]["mountains"], ["亥", "子", "丑"])
+        self.assertEqual(aff_2026["wu_huang"]["palace"], "S")
+
+        # 2024: Year of Dragon (甲辰)
+        # Tai Sui at 辰, Sui Po at 戌, San Sha at South (巳, 午, 未), Wu Huang at West
+        aff_2024 = calc.calculate_annual_afflictions(2024)
+        self.assertEqual(aff_2024["tai_sui"]["mountain"], "辰")
+        self.assertEqual(aff_2024["sui_po"]["mountain"], "戌")
+        self.assertEqual(aff_2024["san_sha"]["sector"], "S")
+        self.assertEqual(aff_2024["san_sha"]["mountains"], ["巳", "午", "未"])
+        self.assertEqual(aff_2024["wu_huang"]["palace"], "W")
+
+        # 2025: Year of Snake (乙巳)
+        # Tai Sui at 巳, Sui Po at 亥, San Sha at East (寅, 卯, 辰), Wu Huang at Northeast
+        aff_2025 = calc.calculate_annual_afflictions(2025)
+        self.assertEqual(aff_2025["tai_sui"]["mountain"], "巳")
+        self.assertEqual(aff_2025["sui_po"]["mountain"], "亥")
+        self.assertEqual(aff_2025["san_sha"]["sector"], "E")
+        self.assertEqual(aff_2025["san_sha"]["mountains"], ["寅", "卯", "辰"])
+        self.assertEqual(aff_2025["wu_huang"]["palace"], "NE")
+
+    # 30. Test Day Master-Specific Wealth and Career Scoring
+    def test_30_bazi_day_master_specific_wealth_career(self):
+        """Verify BaZi wealth (我克者为妻财) and career (克我者为官杀) adhere to Day Master elements."""
+        alert = self.alert_engine
+
+        # Day Master 庚 (Metal) -> Wealth is Wood (甲, 乙, 寅, 卯), Officer is Fire (丙, 丁, 巳, 午)
+        # Day with Wood (甲寅) -> High wealth
+        score_metal_on_wood = alert._compute_wealth_score("庚", "甲寅")
+        # Day with Earth (戊戌) -> Earth produces Metal (Resource, not Wealth)
+        score_metal_on_earth = alert._compute_wealth_score("庚", "戊戌")
+        self.assertGreater(score_metal_on_wood, score_metal_on_earth)
+
+        # Day Master 壬 (Water) -> Wealth is Fire (丙, 丁, 巳, 午), Officer is Earth (戊, 己, 辰, 戌, 丑, 未)
+        # Day with Fire (丙午) -> High wealth for Water Day Master
+        score_water_on_fire = alert._compute_wealth_score("壬", "丙午")
+        # Day with Wood (甲寅) -> Wood drains Water (Output, not Wealth)
+        score_water_on_wood = alert._compute_wealth_score("壬", "甲寅")
+        self.assertGreater(score_water_on_fire, score_water_on_wood)
+
+    # 31. Test Pre-Li Chun January Flying Star Cutoff
+    def test_31_pre_lichun_january_flying_star(self):
+        """Verify that January queries before Li Chun belong to previous solar year's star."""
+        calc = self.calc_engine
+
+        # 2026 Month 1 (January): before Li Chun -> Center star belongs to 2025 (Star 2)
+        res_jan = calc.calculate_flying_stars(2026, month=1)
+        self.assertEqual(res_jan["data"]["solar_year"], 2025)
+        self.assertEqual(res_jan["data"]["annual_center_star"], 2)
+        self.assertIsNotNone(res_jan["data"]["li_chun_note"])
+
+        # 2026 Month 3 (March): after Li Chun -> Center star belongs to 2026 (Star 1)
+        res_mar = calc.calculate_flying_stars(2026, month=3)
+        self.assertEqual(res_mar["data"]["solar_year"], 2026)
+        self.assertEqual(res_mar["data"]["annual_center_star"], 1)
+        self.assertIsNone(res_mar["data"]["li_chun_note"])
+
+    # 32. Test Annual Afflictions API Endpoint
+    def test_32_annual_afflictions_api_endpoint(self):
+        """Verify REST API endpoint calculate_annual_afflictions returns valid data."""
+        from api.server import calculate_annual_afflictions, AnnualAfflictionsRequest
+
+        # Test with POST body request schema
+        res_post = calculate_annual_afflictions(req=AnnualAfflictionsRequest(year=2026))
+        self.assertTrue(res_post["success"])
+        self.assertEqual(res_post["data"]["tai_sui"]["mountain"], "午")
+        self.assertEqual(res_post["data"]["san_sha"]["sector"], "N")
+
+        # Test with GET query parameter
+        res_get = calculate_annual_afflictions(year=2024)
+        self.assertTrue(res_get["success"])
+        self.assertEqual(res_get["data"]["tai_sui"]["mountain"], "辰")
+        self.assertEqual(res_get["data"]["san_sha"]["sector"], "S")
 
 
 if __name__ == "__main__":

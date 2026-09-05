@@ -83,7 +83,7 @@
                         </div>
                         <div class="form-group">
                             <label>សំណួរ ឬតម្រូវការរបស់អ្នក៖</label>
-                            <textarea id="consultQuery" rows="3" placeholder="ឧ. តើខ្ញុំគួររៀបចំតុធ្វើការ និងទ្វារធំយ៉ាងណាដើម្បីបង្កើនទ្រព្យសម្បត្តិក្នុងឆ្នាំ ២០២៤?"></textarea>
+                            <textarea id="consultQuery" rows="3" placeholder="ឧ. តើខ្ញុំគួររៀបចំតុធ្វើការ និងទ្វារធំយ៉ាងណាដើម្បីបង្កើនទ្រព្យសម្បត្តិក្នុងឆ្នាំ ២០២៦?"></textarea>
                         </div>
                         <button type="submit" class="primary-btn" id="btnConsult">
                             <i class="fa-solid fa-wand-magic-sparkles"></i> វិភាគជាមួយ FS-Supreme-Master
@@ -214,8 +214,8 @@
                     </div>
                     <div class="form-row">
                         <div class="form-group">
-                            <label>ឆ្នាំកំណើត (Year):</label>
-                            <input type="number" id="guaYearInput" value="1988">
+                            <label>ថ្ងៃខែឆ្នាំកំណើត (Birth Date - Li Chun Cutoff):</label>
+                            <input type="date" id="guaDateInput" value="1988-05-15">
                         </div>
                         <div class="form-group">
                             <label>ភេទ (Gender):</label>
@@ -244,26 +244,54 @@
                         <label>បង្វិលមុំដឺក្រេ (0° - 360°):</label>
                         <input type="range" id="compassRange" min="0" max="360" value="180" oninput="updateCompass(this.value)">
                     </div>
-                    <div id="mountainInfo" class="info-pill">ទិសបច្ចុប្បន្ន៖ 180° - 丙/午 (ខាងត្បូង ធាតុភ្លើង)</div>
+                    <div id="mountainInfo" class="info-pill">ទិសបច្ចុប្បន្ន៖ 180° - 丙/午/丁 (ខាងត្បូង ធាតុភ្លើង)</div>
                 </div>
             </div>
         </section>
 
-        <!-- TAB 3: Flying Stars Period 9 -->
+        <!-- TAB 3: Flying Stars Period 9 & House Natal Chart -->
         <section id="starsTab" class="tab-content">
             <div class="glass-card">
                 <div class="card-title">
                     <i class="fa-solid fa-table-cells"></i>
-                    <h3>តារាងតារាហោះ ៩ វិហារ (Xuan Kong Flying Stars - Period 9 Fire)</h3>
+                    <h3>តារាងតារាហោះជោគជតាភូមិគ្រឹះ ស្វៀនខុង (Xuan Kong 24 Mountains Natal Chart)</h3>
                     <div class="year-selector">
-                        <button class="chip-btn active" onclick="loadFlyingStars(2024)">ឆ្នាំ ២០២៤</button>
-                        <button class="chip-btn" onclick="loadFlyingStars(2025)">ឆ្នាំ ២០២៥</button>
-                        <button class="chip-btn" onclick="loadFlyingStars(2026)">ឆ្នាំ ២០២៦</button>
+                        <button class="chip-btn" onclick="setFlyingStarsYear(2024, this)">ឆ្នាំ ២០២៤</button>
+                        <button class="chip-btn" onclick="setFlyingStarsYear(2025, this)">ឆ្នាំ ២០២៥</button>
+                        <button class="chip-btn active" onclick="setFlyingStarsYear(2026, this)">ឆ្នាំ ២០២៦</button>
                     </div>
                 </div>
-                <div class="flying-star-grid" id="flyingStarGrid">
-                    <!-- Dynamic 3x3 Lo Shu Grid -->
+
+                <!-- House Orientation & Period Control -->
+                <div class="form-row" style="margin-bottom:15px; align-items:flex-end;">
+                    <div class="form-group">
+                        <label><i class="fa-solid fa-compass"></i> ទិសបែរមុខផ្ទះ (Facing Degree 0-360°):</label>
+                        <input type="number" id="houseNatalDegree" placeholder="ឧ. 180 (ទិសខាងត្បូង)" min="0" max="360" value="180">
+                    </div>
+                    <div class="form-group">
+                        <label><i class="fa-solid fa-clock-rotate-left"></i> យុគសាងសង់ ឬចូលនៅ (Period):</label>
+                        <select id="houseNatalPeriod">
+                            <option value="9" selected>យុគ ៩ (Period 9: 2024-2043) - អធិរាជបច្ចុប្បន្ន</option>
+                            <option value="8">យុគ ៨ (Period 8: 2004-2023)</option>
+                            <option value="7">យុគ ៧ (Period 7: 1984-2003)</option>
+                            <option value="6">យុគ ៦ (Period 6: 1964-1983)</option>
+                        </select>
+                    </div>
+                    <div class="form-group" style="flex:0 0 auto;">
+                        <button class="primary-btn" onclick="loadFlyingStars()" style="height:42px; padding:0 18px;"><i class="fa-solid fa-calculator"></i> គូសប្លង់ផ្កាយ</button>
+                    </div>
                 </div>
+
+                <div id="chartMetaBadge" class="info-pill" style="margin-bottom:15px; display:none;"></div>
+
+                <div class="flying-star-grid" id="flyingStarGrid">
+                    <!-- Dynamic 3x3 Lo Shu Grid with Mountain, Water, Period, and Annual Stars -->
+                </div>
+
+                <div id="castleGateBox" class="advice-card" style="margin-top:15px; display:none;">
+                    <!-- Castle Gates and Ling Shen / Zheng Shen Guidance -->
+                </div>
+
                 <div id="starAdviceBox" class="advice-card">
                     <h4>💡 យុទ្ធសាស្ត្ររៀបចំគេហដ្ឋានក្នុងយុគទី ៩ (Period 9: 2024-2043)</h4>
                     <p>យុគទី ៩ ជាយុគធាតុភ្លើង តារាលេខ ៩ ស្វាយ (Star 9 Purple) ជាតារាអធិរាជ។ ទិសខាងត្បូងជាទិសស្រូបថាមពល Wang Qi ខ្លាំងបំផុត!</p>

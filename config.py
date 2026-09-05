@@ -50,15 +50,18 @@ class SystemConfig:
 
     @property
     def GEMINI_KEY_POOL(self) -> List[str]:
-        """Extract and clean all available Gemini API keys into a resilient pool."""
+        """Extract and clean all available valid Gemini API keys into a resilient pool."""
         keys = []
+        raw_candidates = []
         if self.GEMINI_API_KEY:
-            keys.append(self.GEMINI_API_KEY.strip())
+            raw_candidates.append(self.GEMINI_API_KEY.strip())
         if self.GEMINI_API_KEYS_RAW:
             for k in self.GEMINI_API_KEYS_RAW.split(","):
-                k_clean = k.strip()
-                if k_clean and k_clean not in keys:
-                    keys.append(k_clean)
+                raw_candidates.append(k.strip())
+        for k in raw_candidates:
+            # Valid Google AI Studio Gemini API keys begin with 'AIzaSy'
+            if k and k.startswith("AIzaSy") and k not in keys:
+                keys.append(k)
         return keys
 
     # Custom Dedicated Endpoint URLs (Optional)
@@ -76,6 +79,9 @@ class SystemConfig:
     # API Server Settings
     API_HOST: str = os.getenv("API_HOST", "0.0.0.0")
     API_PORT: int = int(os.getenv("API_PORT", "8000"))
+    CORS_ORIGINS: List[str] = [
+        orig.strip() for orig in os.getenv("CORS_ORIGINS", "*").split(",") if orig.strip()
+    ]
 
     # Memory & Storage Management for 1GB VPS (30GB NVMe Disk)
     MAX_RAM_MB: int = int(os.getenv("MAX_RAM_MB", "800"))
@@ -142,3 +148,4 @@ class SystemConfig:
 
 
 config = SystemConfig()
+CORS_ORIGINS = config.CORS_ORIGINS

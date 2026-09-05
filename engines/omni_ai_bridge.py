@@ -60,6 +60,12 @@ class GeminiMultiKeyPool:
         if not self.is_available():
             return None
 
+        # Candidate models for failover against 404 model URI pattern mismatches
+        candidate_models = [self.model_name.replace("models/", "")]
+        for fb in ["gemini-1.5-flash", "gemini-2.0-flash", "gemini-1.5-pro"]:
+            if fb not in candidate_models:
+                candidate_models.append(fb)
+
         # Attempt up to total keys count before giving up
         max_attempts = min(len(self.keys), 5)
         for attempt in range(max_attempts):
@@ -67,51 +73,56 @@ class GeminiMultiKeyPool:
             if not api_key:
                 break
 
-            clean_model = self.model_name.replace("models/", "")
-            url = f"https://generativelanguage.googleapis.com/v1beta/models/{clean_model}:generateContent?key={api_key}"
+            for clean_model in candidate_models:
+                url = f"https://generativelanguage.googleapis.com/v1beta/models/{clean_model}:generateContent?key={api_key}"
 
-            payload = {
-                "contents": [
-                    {
-                        "role": "user",
-                        "parts": [
-                            {"text": f"[SYSTEM INSTRUCTION]\n{system_instruction}\n\n[USER QUERY]\n{user_prompt}"}
-                        ]
+                payload = {
+                    "contents": [
+                        {
+                            "role": "user",
+                            "parts": [
+                                {"text": f"[SYSTEM INSTRUCTION]\n{system_instruction}\n\n[USER QUERY]\n{user_prompt}"}
+                            ]
+                        }
+                    ],
+                    "generationConfig": {
+                        "temperature": temperature,
+                        "maxOutputTokens": max_output_tokens,
+                        "topP": 0.95
                     }
-                ],
-                "generationConfig": {
-                    "temperature": temperature,
-                    "maxOutputTokens": max_output_tokens,
-                    "topP": 0.95
                 }
-            }
 
-            headers = {
-                "Content-Type": "application/json"
-            }
+                headers = {
+                    "Content-Type": "application/json"
+                }
 
-            try:
-                data_bytes = json.dumps(payload).encode("utf-8")
-                req = urllib.request.Request(url, data=data_bytes, headers=headers, method="POST")
+                try:
+                    data_bytes = json.dumps(payload).encode("utf-8")
+                    req = urllib.request.Request(url, data=data_bytes, headers=headers, method="POST")
 
-                with urllib.request.urlopen(req, timeout=12) as response:
-                    if response.status == 200:
-                        res_json = json.loads(response.read().decode("utf-8"))
-                        candidates = res_json.get("candidates", [])
-                        if candidates:
-                            parts = candidates[0].get("content", {}).get("parts", [])
-                            if parts:
-                                return parts[0].get("text", "")
-            except urllib.error.HTTPError as http_err:
-                if http_err.code == 429:
-                    logger.warning(f"Gemini API key {api_key[:6]}... hit Rate Limit (429). Rotating to next key...")
+                    with urllib.request.urlopen(req, timeout=12) as response:
+                        if response.status == 200:
+                            res_json = json.loads(response.read().decode("utf-8"))
+                            candidates = res_json.get("candidates", [])
+                            if candidates:
+                                parts = candidates[0].get("content", {}).get("parts", [])
+                                if parts:
+                                    self.model_name = clean_model
+                                    return parts[0].get("text", "")
+                except urllib.error.HTTPError as http_err:
+                    if http_err.code in [400, 401, 403, 429]:
+                        reason_msg = "Rate Limit (429)" if http_err.code == 429 else f"Auth/Key Error ({http_err.code}: {http_err.reason})"
+                        logger.warning(f"Gemini API key {api_key[:6]}... encountered {reason_msg}. Rotating to next key...")
+                        break  # Rotate to next key immediately
+                    elif http_err.code == 404:
+                        logger.warning(f"Gemini API model '{clean_model}' returned 404 Not Found. Falling back to alternative model...")
+                        continue  # Try next candidate model
+                    else:
+                        logger.warning(f"Gemini API HTTP Error ({http_err.code}): {http_err.reason}")
+                        continue
+                except Exception as e:
+                    logger.warning(f"Gemini API Call error: {e}")
                     continue
-                else:
-                    logger.warning(f"Gemini API HTTP Error ({http_err.code}): {http_err.reason}")
-                    continue
-            except Exception as e:
-                logger.warning(f"Gemini API Call error: {e}")
-                continue
 
         return None
 

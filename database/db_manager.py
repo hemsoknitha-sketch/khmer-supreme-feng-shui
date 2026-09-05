@@ -23,10 +23,11 @@ DB_PATH = config.DATA_DIR / "supreme_fengshui.db"
 
 def get_db_connection() -> sqlite3.Connection:
     """Get optimized SQLite connection with row factory."""
-    conn = sqlite3.connect(DB_PATH, timeout=10.0)
+    conn = sqlite3.connect(DB_PATH, timeout=15.0)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL;")  # Write-Ahead Logging for high concurrency
     conn.execute("PRAGMA synchronous=NORMAL;")
+    conn.execute("PRAGMA busy_timeout=15000;")
     return conn
 
 

@@ -52,57 +52,73 @@ class VisionFengShuiEngine:
 
         # Attempt Vision API call via Gemini Pool
         if self.omni_bridge.gemini_pool.is_available():
+            candidate_models = [config.GEMINI_MODEL.replace("models/", "")]
+            for fb in ["gemini-1.5-flash", "gemini-2.0-flash", "gemini-1.5-pro"]:
+                if fb not in candidate_models:
+                    candidate_models.append(fb)
+
             for attempt in range(min(len(self.omni_bridge.gemini_pool.keys), 5)):
                 api_key = self.omni_bridge.gemini_pool._get_next_key()
                 if not api_key:
                     break
 
-                clean_model = config.GEMINI_MODEL.replace("models/", "")
-                url = f"https://generativelanguage.googleapis.com/v1beta/models/{clean_model}:generateContent?key={api_key}"
+                for clean_model in candidate_models:
+                    url = f"https://generativelanguage.googleapis.com/v1beta/models/{clean_model}:generateContent?key={api_key}"
 
-                payload = {
-                    "contents": [
-                        {
-                            "role": "user",
-                            "parts": [
-                                {"text": f"[SYSTEM INSTRUCTION]\n{system_instruction}\n\n[USER QUERY]\n{user_query}"},
-                                {
-                                    "inline_data": {
-                                        "mime_type": mime_type,
-                                        "data": b64_data
+                    payload = {
+                        "contents": [
+                            {
+                                "role": "user",
+                                "parts": [
+                                    {"text": f"[SYSTEM INSTRUCTION]\n{system_instruction}\n\n[USER QUERY]\n{user_query}"},
+                                    {
+                                        "inline_data": {
+                                            "mime_type": mime_type,
+                                            "data": b64_data
+                                        }
                                     }
-                                }
-                            ]
+                                ]
+                            }
+                        ],
+                        "generationConfig": {
+                            "temperature": 0.4,
+                            "maxOutputTokens": 2048,
+                            "topP": 0.95
                         }
-                    ],
-                    "generationConfig": {
-                        "temperature": 0.4,
-                        "maxOutputTokens": 2048,
-                        "topP": 0.95
                     }
-                }
 
-                try:
-                    data_bytes = json.dumps(payload).encode("utf-8")
-                    req = urllib.request.Request(url, data=data_bytes, headers={"Content-Type": "application/json"}, method="POST")
-                    with urllib.request.urlopen(req, timeout=18) as response:
-                        if response.status == 200:
-                            res_json = json.loads(response.read().decode("utf-8"))
-                            candidates = res_json.get("candidates", [])
-                            if candidates:
-                                parts = candidates[0].get("content", {}).get("parts", [])
-                                if parts:
-                                    text = parts[0].get("text", "")
-                                    calibrated = self._calibrate_text_length(text, 3500, 4000)
-                                    return {
-                                        "success": True,
-                                        "audit_report": calibrated,
-                                        "engine": f"Gemini Vision ({clean_model})",
-                                        "has_image": True
-                                    }
-                except Exception as e:
-                    logger.warning(f"Vision API call error: {e}")
-                    continue
+                    try:
+                        data_bytes = json.dumps(payload).encode("utf-8")
+                        req = urllib.request.Request(url, data=data_bytes, headers={"Content-Type": "application/json"}, method="POST")
+                        with urllib.request.urlopen(req, timeout=18) as response:
+                            if response.status == 200:
+                                res_json = json.loads(response.read().decode("utf-8"))
+                                candidates = res_json.get("candidates", [])
+                                if candidates:
+                                    parts = candidates[0].get("content", {}).get("parts", [])
+                                    if parts:
+                                        text = parts[0].get("text", "")
+                                        calibrated = self._calibrate_text_length(text, 3500, 4000)
+                                        return {
+                                            "success": True,
+                                            "audit_report": calibrated,
+                                            "engine": f"Gemini Vision ({clean_model})",
+                                            "has_image": True
+                                        }
+                    except urllib.error.HTTPError as http_err:
+                        if http_err.code in [400, 401, 403, 429]:
+                            reason_msg = "Rate Limit (429)" if http_err.code == 429 else f"Auth/Key Error ({http_err.code}: {http_err.reason})"
+                            logger.warning(f"Vision API key hit {reason_msg}. Rotating key...")
+                            break
+                        elif http_err.code == 404:
+                            logger.warning(f"Vision API model '{clean_model}' returned 404. Falling back to alternative...")
+                            continue
+                        else:
+                            logger.warning(f"Vision API HTTP Error ({http_err.code}): {http_err.reason}")
+                            continue
+                    except Exception as e:
+                        logger.warning(f"Vision API call error: {e}")
+                        continue
 
         # Fallback Vision Audit if API is offline
         fallback_audit = self.generate_detailed_vision_audit(user_notes)

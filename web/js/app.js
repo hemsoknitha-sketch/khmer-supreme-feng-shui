@@ -14,7 +14,7 @@ function switchTab(tabId) {
     }
 
     if (tabId === 'starsTab') {
-        loadFlyingStars(2024);
+        loadFlyingStars();
     } else if (tabId === 'baziTab') {
         loadBaziAndFortune();
     }
@@ -98,7 +98,8 @@ async function submitConsultation() {
 
 // 2. Direct Gua Calculation
 async function calculateGuaDirect() {
-    const year = parseInt(document.getElementById('guaYearInput').value) || 1988;
+    const dateInput = document.getElementById('guaDateInput');
+    const birthDate = dateInput ? dateInput.value : (document.getElementById('profileBirthDate')?.value || "1988-05-15");
     const gender = document.getElementById('guaGenderInput').value;
     const resultBox = document.getElementById('guaResult');
 
@@ -107,7 +108,7 @@ async function calculateGuaDirect() {
         const res = await fetch('/api/calculate/gua', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ birth_year: year, gender: gender })
+            body: JSON.stringify({ birth_date: birthDate, gender: gender })
         });
         const json = await res.json();
         if (json.success) {
@@ -119,6 +120,7 @@ async function calculateGuaDirect() {
                 <div class="advice-card" style="margin-top:10px;">
                     <h4>លទ្ធផល Life Gua លេខ៖ ${d.gua_number} (${d.trigram_name}) - ${d.group}</h4>
                     <p><b>ធាតុ៖</b> ${d.element}</p>
+                    ${d.li_chun_note ? `<p style="margin-top:4px; color:var(--gold);"><b>ℹ️ កំណត់សម្គាល់លីឈុន៖</b> ${d.li_chun_note}</p>` : ''}
                     <p style="margin-top:8px; color:var(--jade);"><b>✨ ទិសល្អទាំង ៤៖</b></p>
                     <ul style="padding-left:18px;">${luckyHtml}</ul>
                     <p style="margin-top:8px; color:var(--crimson);"><b>⚠️ ទិសគួរជៀសវាង៖</b></p>
@@ -153,37 +155,110 @@ function updateCompass(val) {
     }
 }
 
-// 4. Load Flying Stars Grid
-async function loadFlyingStars(year) {
+let selectedFlyingStarsYear = 2026;
+
+function setFlyingStarsYear(year, btn) {
+    selectedFlyingStarsYear = year;
+    if (btn) {
+        document.querySelectorAll('.year-selector .chip-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+    }
+    loadFlyingStars();
+}
+
+// 4. Load Complete Xuan Kong 24 Mountains House Natal Chart
+async function loadFlyingStars() {
     const gridEl = document.getElementById('flyingStarGrid');
-    gridEl.innerHTML = "កំពុងផ្ទុកតារាហោះ...";
+    const badgeEl = document.getElementById('chartMetaBadge');
+    const castleBox = document.getElementById('castleGateBox');
+    const adviceBox = document.getElementById('starAdviceBox');
+
+    if (!gridEl) return;
+    gridEl.innerHTML = "<div style='grid-column: 1 / -1; text-align:center; padding:20px; color:var(--gold);'>កំពុងគណនាតារាងជោគជតាភូមិគ្រឹះ ស្វៀនខុង...</div>";
+
+    const degreeInput = document.getElementById('houseNatalDegree');
+    const periodInput = document.getElementById('houseNatalPeriod');
+    const facingDegree = degreeInput ? parseFloat(degreeInput.value || 180) : 180;
+    const period = periodInput ? parseInt(periodInput.value || 9) : 9;
+    const year = selectedFlyingStarsYear || 2026;
 
     try {
-        const res = await fetch('/api/calculate/flying-stars', {
+        const res = await fetch('/api/calculate/house-flying-stars', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ year: year })
+            body: JSON.stringify({
+                facing_degree: facingDegree,
+                period: period,
+                year: year
+            })
         });
         const json = await res.json();
         if (json.success) {
-            const grid = json.data.grid;
+            const data = json.data;
+            const natal = data.natal_chart;
+
+            // Update Badge
+            if (badgeEl) {
+                badgeEl.style.display = "block";
+                const formName = data.formations && data.formations.length > 0 ? data.formations[0].name_kh : "ទម្រង់ធម្មតា";
+                badgeEl.innerHTML = `
+                    <strong>ទម្រង់ហុងស៊ុយ៖</strong> ${formName} •
+                    <strong>អង្គុយ/បែរ៖</strong> 坐 ${data.sitting.mountain} (${data.sitting.degree}°) 向 ${data.facing.mountain} (${data.facing.degree}°) •
+                    <strong>ប្រភេទប្លង់៖</strong> ${data.chart_mode}
+                `;
+            }
+
+            // Render 3x3 Lo Shu layout: SE, S, SW, E, CENTER, W, NE, N, NW
             const layout = ["SE", "S", "SW", "E", "CENTER", "W", "NE", "N", "NW"];
             let html = "";
             layout.forEach(pos => {
-                const cell = grid[pos];
+                const cell = natal[pos];
                 const isCenter = pos === "CENTER";
+                const isFacing = cell.is_facing_palace ? "border: 2px solid #ff7675;" : "";
+                const isSitting = cell.is_sitting_palace ? "border: 2px solid #00cec9;" : "";
+                const tag = cell.is_facing_palace ? "<span style='color:#ff7675;'>[ទិសមុខ]</span> " : (cell.is_sitting_palace ? "<span style='color:#00cec9;'>[ទិសអង្គុយ]</span> " : "");
+
                 html += `
-                    <div class="star-cell ${isCenter ? 'center-cell' : ''}">
-                        <div class="star-palace">${pos}</div>
-                        <div class="star-number">${cell.star_number}</div>
-                        <div class="star-title">${cell.details.name || ''}</div>
+                    <div class="star-cell ${isCenter ? 'center-cell' : ''}" style="${isFacing || isSitting}">
+                        <div class="star-palace">${tag}${pos} (${cell.palace_kh.split(' ')[0]})</div>
+                        <div class="natal-star-box">
+                            <span class="natal-m-star" title="ផ្កាយភ្នំ Mountain Star (សុខភាព/មនុស្ស)">${cell.mountain_star}</span>
+                            <span class="natal-w-star" title="ផ្កាយទឹក Water Star (ទ្រព្យសម្បត្តិ/លុយកាក់)">${cell.water_star}</span>
+                        </div>
+                        <div class="natal-p-star" title="ផ្កាយយុគ Period Star">${cell.period_star}</div>
+                        <div class="natal-a-badge" title="ផ្កាយប្រចាំឆ្នាំ Annual Star">${year}: ${cell.annual_star}</div>
+                        <div class="star-title" style="font-size:0.7rem; margin-top:4px;">${cell.cure_advice.split('៖')[0]}</div>
                     </div>
                 `;
             });
             gridEl.innerHTML = html;
+
+            // Castle Gates & Ling Shen guidance box
+            if (castleBox && data.castle_gates) {
+                castleBox.style.display = "block";
+                const cg = data.castle_gates;
+                const zs = data.ling_shen_zheng_shen;
+                castleBox.innerHTML = `
+                    <h4>🏰 ក្បួនទ្វារបន្ទាយ (Castle Gate Formula) & វិញ្ញាណសូន្យ (Ling Shen Period 9)</h4>
+                    <p><strong>ទ្វារបន្ទាយឆ្វេង (${cg.left_castle_gate.palace})៖</strong> ${cg.left_castle_gate.status_kh} - ${cg.left_castle_gate.advice}</p>
+                    <p><strong>ទ្វារបន្ទាយស្តាំ (${cg.right_castle_gate.palace})៖</strong> ${cg.right_castle_gate.status_kh} - ${cg.right_castle_gate.advice}</p>
+                    <p style="margin-top:6px; border-top:1px dashed rgba(255,255,255,0.15); padding-top:6px;">
+                        <strong>${zs.period}៖</strong><br>
+                        • ${zs.ling_shen_rule}<br>
+                        • ${zs.zheng_shen_rule}
+                    </p>
+                `;
+            }
+
+            if (adviceBox && data.practical_advice) {
+                adviceBox.innerHTML = `
+                    <h4>💡 ការវិភាគលម្អិត និងដំបូន្មានហុងស៊ុយគេហដ្ឋាន</h4>
+                    <p>${data.practical_advice}</p>
+                `;
+            }
         }
     } catch (e) {
-        gridEl.innerHTML = `កំហុស៖ ${e.message}`;
+        gridEl.innerHTML = `<div style='grid-column: 1 / -1; color:#ff7675;'>កំហុសក្នុងការគណនាតារាហោះ៖ ${e.message}</div>`;
     }
 }
 
@@ -207,15 +282,32 @@ async function loadBaziAndFortune() {
         if (baziJson.success) {
             const p = baziJson.data.pillars;
             baziGrid.innerHTML = `
-                <div class="pillar-card"><div class="pillar-name">សសរស្តម្ភឆ្នាំ</div><div class="pillar-ganzhi">${p.year.ganzhi}</div></div>
-                <div class="pillar-card"><div class="pillar-name">សសរស្តម្ភខែ</div><div class="pillar-ganzhi">${p.month.ganzhi}</div></div>
-                <div class="pillar-card"><div class="pillar-name">សសរស្តម្ភថ្ងៃ</div><div class="pillar-ganzhi">${p.day.ganzhi}</div></div>
-                <div class="pillar-card"><div class="pillar-name">សសរស្តម្ភម៉ោង</div><div class="pillar-ganzhi">${p.time.ganzhi}</div></div>
+                <div class="pillar-card">
+                    <div class="pillar-name">សសរស្តម្ភឆ្នាំ</div>
+                    <div class="pillar-ganzhi">${p.year.ganzhi}</div>
+                    <div style="font-size:0.75rem; color:var(--text-muted); margin-top:4px;">藏干: ${p.year.hidden_stems ? p.year.hidden_stems.join(' ') : ''}</div>
+                </div>
+                <div class="pillar-card">
+                    <div class="pillar-name">សសរស្តម្ភខែ</div>
+                    <div class="pillar-ganzhi">${p.month.ganzhi}</div>
+                    <div style="font-size:0.75rem; color:var(--text-muted); margin-top:4px;">藏干: ${p.month.hidden_stems ? p.month.hidden_stems.join(' ') : ''}</div>
+                </div>
+                <div class="pillar-card">
+                    <div class="pillar-name">សសរស្តម្ភថ្ងៃ (Day Master)</div>
+                    <div class="pillar-ganzhi" style="color:var(--gold); font-weight:800;">${p.day.ganzhi}</div>
+                    <div style="font-size:0.75rem; color:var(--text-muted); margin-top:4px;">藏干: ${p.day.hidden_stems ? p.day.hidden_stems.join(' ') : ''}</div>
+                </div>
+                <div class="pillar-card">
+                    <div class="pillar-name">សសរស្តម្ភម៉ោង</div>
+                    <div class="pillar-ganzhi">${p.time.ganzhi}</div>
+                    <div style="font-size:0.75rem; color:var(--text-muted); margin-top:4px;">藏干: ${p.time.hidden_stems ? p.time.hidden_stems.join(' ') : ''}</div>
+                </div>
             `;
             dmBox.innerHTML = `
                 <div class="advice-card">
+                    <strong>សង្ក្រាន្តសូរ្យគតិ (Jie Qi):</strong> ${baziJson.data.solar_term || 'សង្ក្រាន្តទូទៅ'}<br>
                     <strong>Day Master (អត្តសញ្ញាណ):</strong> ${baziJson.data.day_master.element} (${baziJson.data.day_master.nature})<br>
-                    <strong>តុល្យភាពធាតុ៖</strong> ${baziJson.data.recommendation}
+                    <strong>តុល្យភាព និងឱសថធាតុ (Yong Shen):</strong> ${baziJson.data.recommendation}
                 </div>
             `;
         }

@@ -10,6 +10,13 @@ import logging
 import threading
 import uvicorn
 
+if hasattr(sys.stdout, "reconfigure"):
+    try:
+        sys.stdout.reconfigure(encoding="utf-8")
+        sys.stderr.reconfigure(encoding="utf-8")
+    except Exception:
+        pass
+
 from config import config
 from engines.supreme_master import SupremeFengShuiMaster
 

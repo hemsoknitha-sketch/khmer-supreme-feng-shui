@@ -30,6 +30,8 @@ class FamilySynergyEngine:
         "husband": ("spouse", "ស្វាមី (ប្តី)", "male"),
         "ប្រពន្ធ": ("spouse", "ភរិយា (ប្រពន្ធ)", "female"),
         "wife": ("spouse", "ភរិយា (ប្រពន្ធ)", "female"),
+        "spouse": ("spouse", "ស្វាមី/ភរិយា (គូស្រករ)", "female"),
+        "partner": ("spouse", "ដៃគូជីវិត", "female"),
         "គូស្នេហ៍": ("spouse", "គូស្នេហ៍/ដៃគូ", "female"),
         "កូនស្រី": ("daughter", "កូនស្រី", "female"),
         "daughter": ("daughter", "កូនស្រី", "female"),
@@ -89,6 +91,21 @@ class FamilySynergyEngine:
                 return v
         return ("other", raw_input.strip(), "male")
 
+    def _get_solar_birth_year(self, birth_date: str) -> int:
+        """
+        Calculate solar year taking into account Li Chun (立春) via astronomical calculator.
+        If born before Li Chun, belongs to previous solar year in Feng Shui & BaZi.
+        """
+        try:
+            parts = [int(p) for p in birth_date.strip().split("-")]
+            year = parts[0]
+            gua_res = self.calc.calculate_life_gua(birth_year=year, gender="male", birth_date=birth_date)
+            if gua_res.get("success"):
+                return gua_res["data"].get("solar_year", year)
+            return year
+        except Exception:
+            return 1990
+
     def calculate_member_profile(
         self,
         birth_date: str,
@@ -97,32 +114,38 @@ class FamilySynergyEngine:
     ) -> Dict[str, Any]:
         """Calculate individual BaZi, Day Master, Useful God, Zodiac, and Life Gua for a family member."""
         bazi = self.celestial.calculate_precision_bazi(birth_date, birth_time, gender)
-        birth_year = int(birth_date.split("-")[0]) if "-" in birth_date else 1990
+        solar_year = self._get_solar_birth_year(birth_date)
         
-        # Calculate Zodiac animal
-        zodiac_idx = (birth_year - 4) % 12
+        # Calculate Zodiac animal based on solar year
+        zodiac_idx = (solar_year - 4) % 12
         zodiac_animal = self.ZODIAC_NAMES[zodiac_idx]
 
-        gua_res = self.calc.calculate_life_gua(birth_year, gender)
+        gua_res = self.calc.calculate_life_gua(birth_year=solar_year, gender=gender, birth_date=birth_date)
         gua_data = gua_res.get("data", {}) if gua_res.get("success") else {}
 
         dm_info = bazi.get("day_master", {})
-        dm_elem = dm_info.get("element", "Water")
+        dm_elem = dm_info.get("element", "Earth")
         # Clean element string if contains "Yang" or "Yin"
         clean_elem = dm_elem.split()[0] if " " in dm_elem else dm_elem
+        elem_kh = dm_info.get("element_kh")
+        dm_display = f"{clean_elem} ({elem_kh})" if elem_kh else clean_elem
+
+        gua_num = gua_data.get("gua_number") or gua_data.get("life_gua", 1)
+        trigram_val = gua_data.get("trigram") or "Kan"
+        lucky_dirs = gua_data.get("lucky_directions") or gua_data.get("auspicious_directions", [])
 
         return {
             "birth_date": birth_date,
             "birth_time": birth_time,
             "gender": gender,
-            "day_master": clean_elem,
+            "day_master": dm_display,
             "day_master_stem": dm_info.get("stem", "甲"),
             "useful_god": bazi.get("useful_god", "Metal & Water"),
             "zodiac_animal": zodiac_animal,
             "zodiac_kh": self.ZODIAC_KH.get(zodiac_animal, zodiac_animal),
-            "life_gua": gua_data.get("life_gua", 1),
-            "trigram": gua_data.get("trigram", "Kan"),
-            "auspicious_directions": gua_data.get("auspicious_directions", {}),
+            "life_gua": gua_num,
+            "trigram": trigram_val,
+            "auspicious_directions": lucky_dirs,
             "five_elements_count": bazi.get("five_elements_count", {}),
             "four_pillars": bazi.get("four_pillars", {})
         }
@@ -191,16 +214,23 @@ class FamilySynergyEngine:
 
         # 4. Direction Allocations
         direction_allocations = []
+        dir_kh_map = {
+            "N": "ទិសខាងជើង (North)", "S": "ទិសខាងត្បូង (South)",
+            "E": "ទិសខាងកើត (East)", "W": "ទិសខាងលិច (West)",
+            "NE": "ទិសឦសាន (Northeast)", "NW": "ទិសពាយ័ព្យ (Northwest)",
+            "SE": "ទិសអាគ្នេយ៍ (Southeast)", "SW": "ទិសនិរតី (Southwest)"
+        }
         for m in family_members:
             label = m.get("relation_label", m.get("name", "សមាជិក"))
             gua = m.get("life_gua", 1)
-            dirs = m.get("auspicious_directions", {})
-            if isinstance(dirs, dict):
-                best_dir = dirs.get("sheng_qi", "ទិសខាងកើត (East)")
-                health_dir = dirs.get("tian_yi", "ទិសអាគ្នេយ៍ (Southeast)")
-            else:
-                best_dir = "ទិសខាងកើត (East)"
-                health_dir = "ទិសអាគ្នេយ៍ (Southeast)"
+            
+            # Retrieve personalized lucky directions for this specific Gua
+            lucky_dirs = self.calc.get_lucky_directions(gua)
+            sheng_qi_item = next((d for d in lucky_dirs if "Sheng Qi" in d.get("type", "")), lucky_dirs[0] if lucky_dirs else None)
+            tian_yi_item = next((d for d in lucky_dirs if "Tian Yi" in d.get("type", "")), lucky_dirs[1] if len(lucky_dirs) > 1 else None)
+
+            best_dir = f"{dir_kh_map.get(sheng_qi_item['direction'], sheng_qi_item['direction'])} ({sheng_qi_item['type']})" if sheng_qi_item else "ទិសខាងកើត (East)"
+            health_dir = f"{dir_kh_map.get(tian_yi_item['direction'], tian_yi_item['direction'])} ({tian_yi_item['type']})" if tian_yi_item else "ទិសអាគ្នេយ៍ (Southeast)"
 
             is_head = (m == main_user)
             role_rec = "បន្ទប់មេគ្រួសារ (Master Bedroom)" if is_head else "បន្ទប់គេងសមាជិក"

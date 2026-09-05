@@ -11,6 +11,13 @@ import platform
 import psutil
 import logging
 import asyncio
+
+if hasattr(sys.stdout, "reconfigure"):
+    try:
+        sys.stdout.reconfigure(encoding="utf-8")
+        sys.stderr.reconfigure(encoding="utf-8")
+    except Exception:
+        pass
 from typing import Dict, Any, Optional, List
 from datetime import datetime, timezone, timedelta
 from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton, BotCommand
@@ -1082,12 +1089,20 @@ class FengShuiTelegramBot:
                         [InlineKeyboardButton("🏠 ម៉ឺនុយដើម", callback_data="menu_main")]
                     ]
                     try:
-                        await application.bot.send_message(
-                            chat_id=tid,
-                            text=daily_msg,
-                            parse_mode="Markdown",
-                            reply_markup=InlineKeyboardMarkup(keyboard)
-                        )
+                        try:
+                            await application.bot.send_message(
+                                chat_id=tid,
+                                text=daily_msg,
+                                parse_mode="Markdown",
+                                reply_markup=InlineKeyboardMarkup(keyboard)
+                            )
+                        except Exception:
+                            # Fallback without parse_mode if special characters cause markdown parsing issues
+                            await application.bot.send_message(
+                                chat_id=tid,
+                                text=daily_msg,
+                                reply_markup=InlineKeyboardMarkup(keyboard)
+                            )
                         self.db.update_user_alert_dispatch(tid, "daily", today_str)
                         logger.info(f"Dispatched 5:00 AM local alert to User {tid} ({tz_name}, Offset: {utc_offset})")
                     except Exception as e:
@@ -1336,8 +1351,9 @@ class FengShuiTelegramBot:
             self_prof = self.db.get_self_profile(from_user.id)
             if self_prof and self_prof.get("birth_date"):
                 try:
-                    dt = datetime.strptime(self_prof["birth_date"], "%Y-%m-%d")
-                    year = dt.year
+                    parts = [int(p) for p in self_prof["birth_date"].strip().split("-")]
+                    y, m, d = parts[0], parts[1], parts[2]
+                    year = (y - 1) if (m < 2 or (m == 2 and d < 4)) else y
                     gender = self_prof.get("gender", "male")
                     args = [str(year), gender]
                 except Exception:
@@ -1346,19 +1362,21 @@ class FengShuiTelegramBot:
                 args = ["1990", "male"]
 
         try:
-            year = int(args[0])
+            raw_arg = args[0].strip()
             gender = args[1].lower() if len(args) > 1 else "male"
-            res = self.calc_engine.calculate_life_gua(year, gender)
+            res = self.calc_engine.calculate_life_gua(birth_year=raw_arg, gender=gender)
 
             if res["success"]:
                 d = res["data"]
                 lucky_str = "\n".join([f"• **{item['direction']}** ({item['type']}): {item['meaning']}" for item in d['lucky_directions']])
                 unlucky_str = "\n".join([f"• **{item['direction']}** ({item['type']}): {item['meaning']}" for item in d['unlucky_directions']])
+                note_str = f"• **កំណត់សម្គាល់លីឈុន (Li Chun):** {d['li_chun_note']}\n" if d.get("li_chun_note") else ""
 
                 msg = (
                     f"🧭 **លទ្ធផល Life Gua (FS-Classical-Calc-v1)**\n"
                     f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
                     f"• **ឆ្នាំកំណើត:** {d['birth_year']} ({'បុរស' if d['gender'] == 'male' else 'ស្ត្រី'})\n"
+                    f"{note_str}"
                     f"• **Gua លេខ:** {d['gua_number']} ({d['trigram_name']})\n"
                     f"• **ធាតុ:** {d['element']}\n"
                     f"• **ក្រុម:** {d['group']}\n\n"
@@ -1371,7 +1389,7 @@ class FengShuiTelegramBot:
                 ]
                 await self._safe_reply(update, msg, reply_markup=InlineKeyboardMarkup(keyboard))
                 asyncio.create_task(self._notify_admin_qa_interaction(
-                    context, from_user, f"/gua {year} {gender}", msg, service_type="🧭 គណនា Life Gua"
+                    context, from_user, f"/gua {raw_arg} {gender}", msg, service_type="🧭 គណនា Life Gua"
                 ))
             else:
                 await self._safe_reply(update, f"❌ កំហុស៖ {res.get('error')}")
@@ -1397,6 +1415,19 @@ class FengShuiTelegramBot:
             center_star_num = center_entry.get("star_number", 1)
             details = center_entry.get("details", {})
             center_star_name = details.get("kh") or details.get("name") or center_entry.get("star_name", "")
+
+            palace_names_kh = {
+                "N": "ខាងជើង N", "S": "ខាងត្បូង S",
+                "E": "ខាងកើត E", "W": "ខាងលិច W",
+                "NE": "ឦសាន NE", "NW": "ពាយព្យ NW",
+                "SE": "អាគ្នេយ៍ SE", "SW": "និរតី SW",
+                "CENTER": "កណ្តាល C"
+            }
+            s5_p = [palace_names_kh.get(p, p) for p, v in grid.items() if v.get("star_number") == 5]
+            s2_p = [palace_names_kh.get(p, p) for p, v in grid.items() if v.get("star_number") == 2]
+            s5_str = ", ".join(s5_p) if s5_p else "កណ្តាល"
+            s2_str = ", ".join(s2_p) if s2_p else "កណ្តាល"
+
             msg = (
                 f"🌌 **តារាហោះ ៩ វិហារ យុគ ៩ (Period 9: 2024-2043)**\n"
                 f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
@@ -1411,9 +1442,10 @@ class FengShuiTelegramBot:
                 f"│ NE:{grid.get('NE', {}).get('star_number', '')} │ N:{grid.get('N', {}).get('star_number', '')}  │ NW:{grid.get('NW', {}).get('star_number', '')} │\n"
                 f"└──────┴──────┴──────┘\n\n"
                 f"🌟 **ទិសស្រូបទ្រព្យយុគ ៩:** ខាងជើង N (Ling Shen Water 零神) & ខាងត្បូង S (Zheng Shen Mountain 正神)\n"
-                f"⚠️ **ទិសគ្រោះធំប្រចាំឆ្នាំ:** ខាងលិច W (Star 5 Yellow 廉贞) & អាគ្នេយ៍ SE (Star 2 Black 巨门)"
+                f"⚠️ **ទិសគ្រោះធំប្រចាំឆ្នាំ {d['year']}:** {s5_str} (Star 5 Yellow 廉贞) & {s2_str} (Star 2 Black 巨门)"
             )
             keyboard = [
+                [InlineKeyboardButton("🛡️ ទិសគ្រោះប្រចាំឆ្នាំ (San Sha/Tai Sui)", callback_data="menu_afflictions")],
                 [InlineKeyboardButton("📚 រៀនក្បួនតារាហោះ យុគ ៩ (មេរៀន ២៣)", callback_data="curr_les_221")],
                 [InlineKeyboardButton("🏠 ម៉ឺនុយដើម", callback_data="menu_main")]
             ]
@@ -1423,6 +1455,61 @@ class FengShuiTelegramBot:
             ))
         else:
             await self._safe_reply(update, f"❌ កំហុស៖ {res.get('error')}")
+
+    async def afflictions_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Handle /afflictions (Tai Sui, Sui Po, San Sha, Wu Huang) command."""
+        from_user = update.effective_user
+        if not self._is_vip_or_admin(from_user.id):
+            await self._send_vip_required_notice(update, from_user.id)
+            return
+
+        target_year = datetime.now().year
+        if context.args and len(context.args) > 0:
+            try:
+                target_year = int(context.args[0])
+            except ValueError:
+                pass
+
+        res = self.calc_engine.calculate_annual_afflictions(target_year)
+        ts = res["tai_sui"]
+        sp = res["sui_po"]
+        ss = res["san_sha"]
+        wh = res["wu_huang"]
+
+        msg = (
+            f"🛡️ **ក្បួនគ្រោះកាចធំៗទាំង ៤ ប្រចាំឆ្នាំ {res['year']} ({res['ganzhi']})**\n"
+            f"*(Grand Annual Afflictions - 四大年煞)*\n"
+            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            f"👑 **១. ថាយសួយ (太岁 Tai Sui - Grand Duke):**\n"
+            f"• ភ្នំ: **{ts['mountain']}** ({ts['animal_kh']}) | ទិស: **{ts['direction']}** ({ts['palace_kh']})\n"
+            f"• ដឺក្រេ: `{ts['degree_range']}`\n"
+            f"• បម្រាម: {ts['rule']}\n"
+            f"• វិធីដោះស្រាយ: {ts['advice']}\n\n"
+            f"⚡ **២. សួយផ័រ (岁破 Sui Po - Year Breaker):**\n"
+            f"• ភ្នំ: **{sp['mountain']}** ({sp['animal_kh']}) | ទិស: **{sp['direction']}** ({sp['palace_kh']})\n"
+            f"• ដឺក្រេ: `{sp['degree_range']}`\n"
+            f"• បម្រាម: {sp['rule']}\n"
+            f"• វិធីដោះស្រាយ: {sp['advice']}\n\n"
+            f"⚔️ **៣. សាមសាត (三煞 San Sha - Three Killings):**\n"
+            f"• តំបន់រងគ្រោះ: **{ss['sector_kh']}** (ភ្នំ {', '.join(ss['mountains'])})\n"
+            f"• បម្រាម: {ss['rule']}\n"
+            f"• វិធីដោះស្រាយ: {ss['advice']}\n\n"
+            f"⚠️ **៤. ផ្កាយ ៥ លឿង (五黄 Wu Huang - Disaster Star):**\n"
+            f"• វិហារដែលធ្លាក់ចុះ: **{wh['palace_kh']}**\n"
+            f"• បម្រាម: {wh['rule']}\n"
+            f"• វត្ថុកែខៃ: {wh['cure']}\n"
+            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            f"📌 **សេចក្តីសន្និដ្ឋានគ្រូ:**\n{res['executive_summary']}"
+        )
+
+        keyboard = [
+            [InlineKeyboardButton("🌌 តារាហោះ ៩ វិហារ", callback_data="menu_flyingstars")],
+            [InlineKeyboardButton("🏠 ម៉ឺនុយដើម", callback_data="menu_main")]
+        ]
+        await self._safe_reply(update, msg, reply_markup=InlineKeyboardMarkup(keyboard))
+        asyncio.create_task(self._notify_admin_qa_interaction(
+            context, from_user, f"/afflictions {target_year}", msg, service_type="🛡️ ទិសគ្រោះប្រចាំឆ្នាំ"
+        ))
 
     async def bazi_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /bazi command (VIP & Super Admin Only)."""
@@ -1490,13 +1577,21 @@ class FengShuiTelegramBot:
             await self._send_profile_required_notice(update, from_user.id)
             return
 
-        args = context.args
-        if not args:
-            today = datetime.now().strftime("%Y-%m-%d")
-            args = [today]
+        self_prof = self.db.get_self_profile(from_user.id) or {}
+        b_date = self_prof.get("birth_date") or "1990-05-15"
+        b_time = self_prof.get("birth_time") or "12:00"
 
-        date_str = args[0]
-        res = self.alert_engine.predict_fortune(date_str)
+        args = context.args
+        target_dt = None
+        date_str = datetime.now().strftime("%Y-%m-%d")
+        if args and len(args) > 0:
+            try:
+                target_dt = datetime.strptime(args[0], "%Y-%m-%d")
+                date_str = args[0]
+            except Exception:
+                pass
+
+        res = self.alert_engine.predict_fortune(b_date, b_time, target_date=target_dt)
         if res["success"]:
             d = res["data"]
             msg = (
@@ -1537,8 +1632,16 @@ class FengShuiTelegramBot:
             if self_prof and self_prof.get("birth_date"):
                 b_date_1 = self_prof["birth_date"]
                 gender_1 = self_prof.get("gender", "male")
-                b_date_2 = None
-                gender_2 = "female"
+
+                # Auto-detect registered spouse from family profiles
+                fam_members = self.db.get_family_members(from_user.id)
+                spouse = next((m for m in fam_members if m.get("relation_type") == "spouse"), None)
+                if spouse and spouse.get("birth_date"):
+                    b_date_2 = spouse["birth_date"]
+                    gender_2 = spouse.get("gender", "female")
+                else:
+                    b_date_2 = None
+                    gender_2 = "female"
             else:
                 guide_text = (
                     "💖 **ក្បួនហុងស៊ុយ និងមហាស្នេហ៍ (Peach Blossom & 8-Pillars Love Zenith)** 💖\n"
@@ -1800,7 +1903,18 @@ class FengShuiTelegramBot:
                     f"សមាជិករួម {len(family_members)} នាក់, ធាតុឱសថគ្រួសារ: {fam_analysis['household_remedy']['element']}]"
                 )
 
-        consult_res = self.master.consult(query=clean_text + family_context_str)
+        # Retrieve user's personal birth profile for accurate grounding evidence
+        self_prof = self.db.get_self_profile(from_user.id)
+        user_bdate = self_prof.get("birth_date") if self_prof else None
+        user_btime = self_prof.get("birth_time", "12:00") if self_prof else "12:00"
+        user_gender = self_prof.get("gender", "male") if self_prof else "male"
+
+        consult_res = self.master.consult(
+            query=clean_text + family_context_str,
+            birth_date=user_bdate,
+            birth_time=user_btime,
+            gender=user_gender
+        )
         response_text = consult_res.get("synthesis", "សូមអភ័យទោស ខ្ញុំមិនអាចឆ្លើយតបនៅពេលនេះបានទេ។")
 
         # Footer info
@@ -2123,7 +2237,7 @@ class FengShuiTelegramBot:
             f"• **ពណ៌សម្លៀកបំពាក់នាំលាភ:** **{khmer['lucky_color']}**\n"
             f"  👉 *អត្ថន័យ:* {khmer['color_meaning']}\n\n"
             f"🏛️ **២. ក្បួនចិនសកល TUNG SHU:**\n"
-            f"• **12 Day Officers:** **{officer['kh']}** ({officer['quality']})\n"
+            f"• **12 Day Officers:** **{officer.get('name', officer.get('kh', ''))}** ({officer.get('quality_kh', officer.get('quality', ''))})\n"
             f"  👉 *កិច្ចការគួរបំពេញ:* {officer['meaning']}\n"
             f"• **តារានក្ខត្តឫក្ស ២៨:** `{almanac['constellation']}`\n\n"
             f"🧭 **៣. ទិសនាំលាភសំណាងប្រចាំថ្ងៃ:**\n"
@@ -2352,7 +2466,7 @@ class FengShuiTelegramBot:
                     f"• **ពណ៌សម្លៀកបំពាក់នាំលាភ:** **{khmer['lucky_color']}**\n"
                     f"  👉 *អត្ថន័យ:* {khmer['color_meaning']}\n\n"
                     f"🏛️ **២. ក្បួនចិនសកល TUNG SHU:**\n"
-                    f"• **12 Day Officers:** **{officer['kh']}** ({officer['quality']})\n"
+                    f"• **12 Day Officers:** **{officer.get('name', officer.get('kh', ''))}** ({officer.get('quality_kh', officer.get('quality', ''))})\n"
                     f"  👉 *កិច្ចការគួរបំពេញ:* {officer['meaning']}\n"
                     f"• **តារានក្ខត្តឫក្ស ២៨:** `{almanac['constellation']}`\n\n"
                     f"🧭 **៣. ទិសនាំលាភសំណាងប្រចាំថ្ងៃ:**\n"
@@ -3066,8 +3180,13 @@ class FengShuiTelegramBot:
                     await self._safe_edit(query, f"❌ កំហុស៖ {res.get('error')}")
 
             elif data == "menu_predict":
-                today = datetime.now().strftime("%Y-%m-%d")
-                res = self.alert_engine.predict_fortune(today)
+                self_prof = self.db.get_self_profile(from_user.id)
+                if not self_prof and not (from_user.id in config.ADMIN_USER_IDS or self.db.get_or_create_user(from_user.id).get("role") == "super_admin"):
+                    await self._send_profile_required_notice(query, from_user.id)
+                    return
+                b_date = (self_prof.get("birth_date") if self_prof else None) or "1990-05-15"
+                b_time = (self_prof.get("birth_time") if self_prof else None) or "12:00"
+                res = self.alert_engine.predict_fortune(b_date, b_time)
                 if res["success"]:
                     d = res["data"]
                     msg = (
@@ -3187,6 +3306,33 @@ class FengShuiTelegramBot:
                         else:
                             await self._safe_edit(query, f"❌ កំហុស៖ {res.get('error')}")
 
+            elif data == "menu_afflictions":
+                res = self.calc_engine.calculate_annual_afflictions(datetime.now().year)
+                ts = res["tai_sui"]
+                sp = res["sui_po"]
+                ss = res["san_sha"]
+                wh = res["wu_huang"]
+                msg = (
+                    f"🛡️ **ក្បួនគ្រោះកាចធំៗទាំង ៤ ប្រចាំឆ្នាំ {res['year']} ({res['ganzhi']})**\n"
+                    f"*(Grand Annual Afflictions - 四大年煞)*\n"
+                    f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                    f"👑 **១. ថាយសួយ (太岁):** {ts['mountain']} ({ts['animal_kh']}) | {ts['direction']} ({ts['degree_range']})\n"
+                    f"• {ts['rule']}\n\n"
+                    f"⚡ **២. សួយផ័រ (岁破):** {sp['mountain']} ({sp['animal_kh']}) | {sp['direction']} ({sp['degree_range']})\n"
+                    f"• {sp['rule']}\n\n"
+                    f"⚔️ **៣. សាមសាត (三煞):** {ss['sector_kh']}\n"
+                    f"• {ss['rule']}\n\n"
+                    f"⚠️ **៤. ផ្កាយ ៥ លឿង (五黄):** {wh['palace_kh']}\n"
+                    f"• {wh['rule']}\n"
+                    f"• វត្ថុកែខៃ: {wh['cure']}\n"
+                    f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                    f"📌 {res['executive_summary']}"
+                )
+                keyboard = [
+                    [InlineKeyboardButton("🌌 តារាហោះ ៩ វិហារ", callback_data="menu_flyingstars")],
+                    [InlineKeyboardButton("🏠 ម៉ឺនុយដើម", callback_data="menu_main")]
+                ]
+                await self._safe_edit(query, msg, reply_markup=InlineKeyboardMarkup(keyboard))
             elif data == "menu_health":
                 await self._send_health_view(query, is_edit=True)
             elif data == "menu_help":
@@ -3238,6 +3384,7 @@ class FengShuiTelegramBot:
             app.add_handler(CommandHandler("learn", self.learn_command))
             app.add_handler(CommandHandler("gua", self.gua_command))
             app.add_handler(CommandHandler("flyingstars", self.flyingstars_command))
+            app.add_handler(CommandHandler(["afflictions", "sansha", "taisui", "suipo"], self.afflictions_command))
             app.add_handler(CommandHandler("bazi", self.bazi_command))
             app.add_handler(CommandHandler("predict", self.predict_command))
             app.add_handler(CommandHandler("daily", self.daily_command))

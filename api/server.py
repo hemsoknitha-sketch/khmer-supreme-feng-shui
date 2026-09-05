@@ -5,10 +5,18 @@ Lightweight asynchronous architecture (< 40MB RAM).
 """
 
 import os
+import sys
 import psutil
 from datetime import datetime
 from typing import Dict, Any, List, Optional
 from pydantic import BaseModel, Field
+
+if hasattr(sys.stdout, "reconfigure"):
+    try:
+        sys.stdout.reconfigure(encoding="utf-8")
+        sys.stderr.reconfigure(encoding="utf-8")
+    except Exception:
+        pass
 
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
@@ -29,9 +37,10 @@ app = FastAPI(
 )
 
 # Enable CORS for Web UI / Frontend
+cors_origins = getattr(config, "CORS_ORIGINS", ["*"])
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=cors_origins if cors_origins else ["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -66,39 +75,56 @@ if web_path.exists():
 # Request / Response Schemas
 # =============================================================================
 class LifeGuaRequest(BaseModel):
-    birth_year: int = Field(..., ge=1900, le=2100, example=1988)
-    gender: str = Field(default="male", example="male")
+    birth_year: Optional[int] = Field(default=None, ge=1900, le=2100, examples=[1988])
+    birth_date: Optional[str] = Field(default=None, examples=["1988-05-15"])
+    gender: str = Field(default="male", examples=["male"])
 
 
 class FlyingStarsRequest(BaseModel):
-    year: int = Field(default=2024, ge=1900, le=2100)
+    year: Optional[int] = Field(default=None, ge=1900, le=2100)
     month: Optional[int] = Field(default=None, ge=1, le=12)
+    degree: Optional[float] = Field(default=None, ge=0, le=360, examples=[180.0])
+    house_degree: Optional[float] = Field(default=None, ge=0, le=360, examples=[180.0])
+    facing_mountain: Optional[str] = Field(default=None, examples=["午"])
+    period: Optional[int] = Field(default=None, ge=1, le=9, examples=[9])
+
+
+class AnnualAfflictionsRequest(BaseModel):
+    year: Optional[int] = Field(default=None, ge=1900, le=2100, examples=[2026])
+
+
+class HouseFlyingStarsRequest(BaseModel):
+    facing_degree: Optional[float] = Field(default=None, ge=0, le=360, examples=[180.0])
+    sitting_degree: Optional[float] = Field(default=None, ge=0, le=360, examples=[0.0])
+    period: Optional[int] = Field(default=None, ge=1, le=9, examples=[9])
+    year: Optional[int] = Field(default=None, ge=1900, le=2100, examples=[2026])
 
 
 class BaZiRequest(BaseModel):
-    birth_date: str = Field(..., example="1988-05-15")
-    birth_time: str = Field(default="12:00", example="10:30")
+    birth_date: str = Field(..., examples=["1988-05-15"])
+    birth_time: str = Field(default="12:00", examples=["10:30"])
 
 
 class FortunePredictRequest(BaseModel):
-    birth_date: str = Field(..., example="1988-05-15")
-    birth_time: str = Field(default="12:00", example="10:30")
+    birth_date: str = Field(..., examples=["1988-05-15"])
+    birth_time: str = Field(default="12:00", examples=["10:30"])
+    target_date: Optional[str] = Field(default=None, examples=["2026-09-03"])
 
 
 class ConsultRequest(BaseModel):
-    query: str = Field(..., example="តើខ្ញុំគួររៀបចំការិយាល័យ និងទ្វារធំយ៉ាងណាដើម្បីបង្កើនទ្រព្យក្នុងយុគ ៩?")
-    birth_date: Optional[str] = Field(default=None, example="1988-05-15")
-    birth_time: str = Field(default="12:00", example="10:30")
-    gender: str = Field(default="male", example="male")
-    house_degree: Optional[float] = Field(default=None, example=180.0)
+    query: str = Field(..., examples=["តើខ្ញុំគួររៀបចំការិយាល័យ និងទ្វារធំយ៉ាងណាដើម្បីបង្កើនទ្រព្យក្នុងយុគ ៩?"])
+    birth_date: Optional[str] = Field(default=None, examples=["1988-05-15"])
+    birth_time: str = Field(default="12:00", examples=["10:30"])
+    gender: str = Field(default="male", examples=["male"])
+    house_degree: Optional[float] = Field(default=None, examples=[180.0])
     complex_reasoning: bool = Field(default=False)
 
 
 class LoveAnalyzeRequest(BaseModel):
-    birth_date_1: str = Field(..., example="1990-05-15")
-    gender_1: str = Field(default="male", example="male")
-    birth_date_2: Optional[str] = Field(default=None, example="1992-08-20")
-    gender_2: Optional[str] = Field(default="female", example="female")
+    birth_date_1: str = Field(..., examples=["1990-05-15"])
+    gender_1: str = Field(default="male", examples=["male"])
+    birth_date_2: Optional[str] = Field(default=None, examples=["1992-08-20"])
+    gender_2: Optional[str] = Field(default="female", examples=["female"])
 
 
 # =============================================================================
@@ -212,8 +238,13 @@ def health_check():
 
 @app.post("/api/calculate/gua")
 def calculate_gua(req: LifeGuaRequest):
-    """Calculate Life Gua and Lucky/Unlucky directions."""
-    result = calc_engine.calculate_life_gua(req.birth_year, req.gender)
+    """Calculate Life Gua and Lucky/Unlucky directions with Li Chun solar cutoff."""
+    birth_year = req.birth_year if req.birth_year is not None else 1990
+    result = calc_engine.calculate_life_gua(
+        birth_year=birth_year,
+        gender=req.gender,
+        birth_date=req.birth_date
+    )
     if not result.get("success"):
         raise HTTPException(status_code=400, detail=result.get("error"))
     return result
@@ -221,9 +252,73 @@ def calculate_gua(req: LifeGuaRequest):
 
 @app.post("/api/calculate/flying-stars")
 def calculate_flying_stars(req: FlyingStarsRequest):
-    """Calculate Xuan Kong Flying Stars 9 Palaces grid and cures."""
-    result = calc_engine.calculate_flying_stars(req.year, req.month)
+    """Calculate Xuan Kong Flying Stars 9 Palaces grid and cures, with optional 24-mountain house chart."""
+    target_year = req.year if req.year is not None else datetime.now().year
+    result = calc_engine.calculate_flying_stars(target_year, req.month)
+
+    # Determine effective facing degree from house_degree, degree, or facing_mountain
+    effective_degree = req.house_degree if req.house_degree is not None else req.degree
+    if effective_degree is None and req.facing_mountain:
+        for m in calc_engine.mountains_24:
+            if m.get("name") == req.facing_mountain or req.facing_mountain in m.get("name", ""):
+                d_start = m["degree_start"]
+                d_end = m["degree_end"]
+                if d_start > d_end:
+                    effective_degree = (d_start + d_end + 360) / 2.0 % 360
+                else:
+                    effective_degree = (d_start + d_end) / 2.0
+                break
+
+    if effective_degree is not None:
+        house_res = calc_engine.calculate_house_flying_stars(
+            facing_degree=effective_degree,
+            period=req.period,
+            year=target_year
+        )
+        if house_res.get("success"):
+            result["data"]["house_natal_chart"] = house_res["data"]
     return result
+
+
+@app.post("/api/calculate/house-flying-stars")
+def calculate_house_flying_stars(req: HouseFlyingStarsRequest):
+    """
+    Calculate complete Xuan Kong Flying Stars 24 Mountains Natal Chart (玄空九宫宅命盘).
+    Includes Period Base Star, Mountain Star, Facing Star, Ti Gua replacement,
+    Four Grand Formations (旺山旺向, 上山下水, 双星到向, 双星到座), Castle Gates,
+    and Ling Shen / Zheng Shen Period 9 water/mountain placement rules.
+    """
+    res = calc_engine.calculate_house_flying_stars(
+        facing_degree=req.facing_degree,
+        sitting_degree=req.sitting_degree,
+        period=req.period,
+        year=req.year
+    )
+    if not res.get("success"):
+        raise HTTPException(status_code=400, detail=res.get("error"))
+    return res
+
+
+@app.get("/api/calculate/annual-afflictions")
+@app.post("/api/calculate/annual-afflictions")
+def calculate_annual_afflictions(
+    req: Optional[AnnualAfflictionsRequest] = None,
+    year: Optional[int] = Query(default=None, ge=1900, le=2100)
+):
+    """
+    Calculate Grand Annual Calamities & Afflictions (四大年煞):
+    Tai Sui (太岁), Sui Po (岁破), San Sha (三煞: 劫煞, 灾煞, 岁煞), and Wu Huang (五黄廉贞).
+    """
+    target_year = None
+    if req and req.year is not None:
+        target_year = req.year
+    elif year is not None:
+        target_year = year
+    else:
+        target_year = datetime.now().year
+
+    res = calc_engine.calculate_annual_afflictions(target_year)
+    return {"success": True, "data": res}
 
 
 @app.post("/api/calculate/bazi")
@@ -238,7 +333,14 @@ def calculate_bazi(req: BaZiRequest):
 @app.post("/api/predict/fortune")
 def predict_fortune(req: FortunePredictRequest):
     """Predict Luck Score (0-100), Wealth, Career, Health, Love, and Auspicious Hours."""
-    result = alert_engine.predict_fortune(req.birth_date, req.birth_time)
+    target_dt = None
+    if req.target_date:
+        try:
+            target_dt = datetime.strptime(req.target_date, "%Y-%m-%d")
+        except Exception:
+            pass
+
+    result = alert_engine.predict_fortune(req.birth_date, req.birth_time, target_date=target_dt)
     if not result.get("success"):
         raise HTTPException(status_code=400, detail=result.get("error"))
     return result
@@ -374,8 +476,8 @@ class RedeemRequest(BaseModel):
 
 
 class GenKeysRequest(BaseModel):
-    tier: str = Field(default="monthly", example="monthly")
-    count: int = Field(default=1, ge=1, le=20, example=5)
+    tier: str = Field(default="monthly", examples=["monthly"])
+    count: int = Field(default=1, ge=1, le=20, examples=[5])
     admin_id: int = Field(default=0)
 
 
@@ -427,9 +529,15 @@ def generate_admin_keys(req: GenKeysRequest):
 # Pillar 1 Vision & 3D 4K Render Endpoints
 # =============================================================================
 class Vision3DRequest(BaseModel):
-    space_type: str = Field(default="living_room", example="living_room")
-    facing_direction: str = Field(default="South (Period 9 Li Fire)", example="South (Period 9 Li Fire)")
-    style: str = Field(default="modern_luxury_fengshui", example="modern_luxury_fengshui")
+    space_type: str = Field(default="living_room", examples=["living_room"])
+    facing_direction: str = Field(default="South (Period 9 Li Fire)", examples=["South (Period 9 Li Fire)"])
+    style: str = Field(default="modern_luxury_fengshui", examples=["modern_luxury_fengshui"])
+
+
+class VisionAuditBase64Request(BaseModel):
+    image_base64: str = Field(..., description="Base64 encoded image data", examples=["iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="])
+    mime_type: Optional[str] = Field(default="image/jpeg", description="MIME type (image/jpeg, image/png, etc.)", examples=["image/jpeg"])
+    user_notes: Optional[str] = Field(default="", description="Optional room or space context notes", examples=["Living room facing South"])
 
 
 @app.post("/api/vision/render3d")
@@ -441,29 +549,50 @@ def get_3d_render_spec(space_type: str = "living_room", style: str = "modern_lux
     return {"success": True, "data": res}
 
 
+@app.post("/api/vision/audit")
+def audit_floor_plan_image(req: VisionAuditBase64Request):
+    """Perform Multimodal Computer Vision Feng Shui Audit on uploaded image (Base64)."""
+    import base64
+    from engines.vision_3d_engine import vision_3d_engine
+    try:
+        raw_b64 = req.image_base64
+        if "," in raw_b64:
+            raw_b64 = raw_b64.split(",", 1)[1]
+        img_bytes = base64.b64decode(raw_b64)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Invalid base64 image data: {str(e)}")
+
+    res = vision_3d_engine.audit_image(
+        image_bytes=img_bytes,
+        mime_type=req.mime_type or "image/jpeg",
+        user_notes=req.user_notes or ""
+    )
+    return res
+
+
 # =============================================================================
 # Pillar 9: Celestial Scheduler & Personalized Astrology Endpoints
 # =============================================================================
 class CelestialDailyRequest(BaseModel):
-    birth_date: str = Field(..., example="1990-05-15")
-    birth_time: str = Field(default="12:00", example="08:30")
-    gender: str = Field(default="male", example="male")
-    target_date: Optional[str] = Field(default=None, example="2026-09-02")
+    birth_date: str = Field(..., examples=["1990-05-15"])
+    birth_time: str = Field(default="12:00", examples=["08:30"])
+    gender: str = Field(default="male", examples=["male"])
+    target_date: Optional[str] = Field(default=None, examples=["2026-09-02"])
 
 
 class CelestialMonthlyRequest(BaseModel):
-    birth_date: str = Field(..., example="1990-05-15")
-    birth_time: str = Field(default="12:00", example="08:30")
-    gender: str = Field(default="male", example="male")
-    year: Optional[int] = Field(default=None, example=2026)
-    month: Optional[int] = Field(default=None, example=9)
+    birth_date: str = Field(..., examples=["1990-05-15"])
+    birth_time: str = Field(default="12:00", examples=["08:30"])
+    gender: str = Field(default="male", examples=["male"])
+    year: Optional[int] = Field(default=None, examples=[2026])
+    month: Optional[int] = Field(default=None, examples=[9])
 
 
 class CelestialYearlyRequest(BaseModel):
-    birth_date: str = Field(..., example="1990-05-15")
-    birth_time: str = Field(default="12:00", example="08:30")
-    gender: str = Field(default="male", example="male")
-    year: Optional[int] = Field(default=None, example=2026)
+    birth_date: str = Field(..., examples=["1990-05-15"])
+    birth_time: str = Field(default="12:00", examples=["08:30"])
+    gender: str = Field(default="male", examples=["male"])
+    year: Optional[int] = Field(default=None, examples=[2026])
 
 
 @app.post("/api/celestial/daily")
@@ -535,12 +664,12 @@ def get_daily_almanac():
 # Pillar 10: Family Synergy & Lineage BaZi REST API
 # =============================================================================
 class FamilyMemberRequest(BaseModel):
-    telegram_id: int = Field(..., description="Telegram User ID")
-    relation: str = Field(..., description="Relation: ខ្ញុំ, ប្តី, ប្រពន្ធ, កូនស្រី, កូនប្រុស, ឪពុក, ម្តាយ, etc.")
-    birth_date: str = Field(..., description="YYYY-MM-DD")
-    birth_time: Optional[str] = Field("12:00", description="HH:MM")
-    gender: Optional[str] = Field("male", description="male / female")
-    name: Optional[str] = Field(None, description="Optional member name")
+    telegram_id: int = Field(..., description="Telegram User ID", examples=[123456789])
+    relation: str = Field(..., description="Relation: ខ្ញុំ, ប្តី, ប្រពន្ធ, កូនស្រី, កូនប្រុស, ឪពុក, ម្តាយ, etc.", examples=["ខ្ញុំ"])
+    birth_date: str = Field(..., description="YYYY-MM-DD", examples=["1990-05-15"])
+    birth_time: Optional[str] = Field("12:00", description="HH:MM", examples=["10:30"])
+    gender: Optional[str] = Field("male", description="male / female", examples=["male"])
+    name: Optional[str] = Field(None, description="Optional member name", examples=["Sokha"])
 
 
 @app.post("/api/family/member")
@@ -591,18 +720,36 @@ def get_family_profile(telegram_id: int):
     }
 
 
+class FamilyReportRequest(BaseModel):
+    telegram_id: int = Field(..., examples=[123456789])
+
+
 @app.post("/api/family/report")
-def get_family_synergy_report(req: Dict[str, Any]):
+def get_family_synergy_report(req: FamilyReportRequest):
     """Generate complete formatted Family Synergy Report without noise symbols."""
     from engines.family_synergy_engine import family_synergy_engine
     from database.db_manager import db_manager
 
-    telegram_id = req.get("telegram_id")
-    if not telegram_id:
-        raise HTTPException(status_code=400, detail="telegram_id is required")
-
-    members = db_manager.get_family_members(int(telegram_id))
+    members = db_manager.get_family_members(req.telegram_id)
     report = family_synergy_engine.generate_family_synergy_report(members)
     return {"success": True, "report": report}
+
+
+class DeleteFamilyMemberRequest(BaseModel):
+    telegram_id: int = Field(..., description="Telegram User ID", examples=[123456789])
+    relation_type: Optional[str] = Field(None, description="Relation type to delete", examples=["spouse"])
+    name: Optional[str] = Field(None, description="Member name", examples=["Sokha"])
+
+
+@app.delete("/api/family/member")
+def delete_family_member(req: DeleteFamilyMemberRequest):
+    """Delete a family member profile for a user."""
+    from database.db_manager import db_manager
+    success = db_manager.delete_family_member(
+        telegram_id=req.telegram_id,
+        relation_type=req.relation_type,
+        name=req.name
+    )
+    return {"success": success, "telegram_id": req.telegram_id}
 
 

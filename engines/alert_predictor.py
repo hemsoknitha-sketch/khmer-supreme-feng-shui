@@ -46,17 +46,22 @@ class AlertPredictionEngine:
         if LUNAR_AVAILABLE:
             solar_now = Solar.fromYmdHms(now.year, now.month, now.day, now.hour, now.minute, 0)
             lunar_now = solar_now.getLunar()
-            current_day_pillar = lunar_now.getDayInGanZhi()
-            current_month_pillar = lunar_now.getMonthInGanZhi()
+            current_day_pillar = getattr(lunar_now, "getDayInGanZhiExact", lunar_now.getDayInGanZhi)()
+            current_month_pillar = getattr(lunar_now, "getMonthInGanZhiExact", lunar_now.getMonthInGanZhi)()
         else:
-            current_day_pillar = "甲子"
-            current_month_pillar = "丙寅"
+            fb = self.calc_engine._fallback_bazi(now.year, now.month, now.day, now.hour)
+            current_month_pillar = fb[1]
+            current_day_pillar = fb[2]
 
         # Step 3: Compute Multi-Dimensional Compatibility Scores (0-100)
+        user_year_branch = user_bazi.get("pillars", {}).get("year", {}).get("branch", "")
+        user_day_branch = user_bazi.get("pillars", {}).get("day", {}).get("branch", "")
+        personal_branch = user_day_branch or user_year_branch
+
         overall_score = self._compute_compatibility_score(dm_stem, current_day_pillar)
         wealth_score = self._compute_wealth_score(dm_stem, current_day_pillar)
         career_score = self._compute_career_score(dm_stem, current_day_pillar)
-        love_score = self._compute_love_score(dm_stem, current_day_pillar)
+        love_score = self._compute_love_score(dm_stem, current_day_pillar, user_branch=personal_branch)
         health_score = self._compute_health_score(dm_stem, current_day_pillar)
 
         # Step 4: Determine Best and Worst Double-Hours
@@ -115,26 +120,130 @@ class AlertPredictionEngine:
 
         return max(35, min(98, base))
 
+    # Five Elements Mappings for Classical BaZi Interactions
+    STEM_ELEMENT_MAP = {
+        "甲": "Wood", "乙": "Wood",
+        "丙": "Fire", "丁": "Fire",
+        "戊": "Earth", "己": "Earth",
+        "庚": "Metal", "辛": "Metal",
+        "壬": "Water", "癸": "Water"
+    }
+
+    # Wealth Element: 我克者为妻财 (Element Day Master controls)
+    WEALTH_SYMBOLS = {
+        "Wood": ["戊", "己", "辰", "戌", "丑", "未"],
+        "Fire": ["庚", "辛", "申", "酉"],
+        "Earth": ["壬", "癸", "亥", "子"],
+        "Metal": ["甲", "乙", "寅", "卯"],
+        "Water": ["丙", "丁", "巳", "午"]
+    }
+
+    # Officer / Career Element: 克我者为官杀 (Element that controls Day Master)
+    OFFICER_SYMBOLS = {
+        "Wood": ["庚", "辛", "申", "酉"],
+        "Fire": ["壬", "癸", "亥", "子"],
+        "Earth": ["甲", "乙", "寅", "卯"],
+        "Metal": ["丙", "丁", "巳", "午"],
+        "Water": ["戊", "己", "辰", "戌", "丑", "未"]
+    }
+
+    # Resource / Health & Noble Element: 生我者为印枭 (Element that produces Day Master)
+    RESOURCE_SYMBOLS = {
+        "Wood": ["壬", "癸", "亥", "子"],
+        "Fire": ["甲", "乙", "寅", "卯"],
+        "Earth": ["丙", "丁", "巳", "午"],
+        "Metal": ["戊", "己", "辰", "戌", "丑", "未"],
+        "Water": ["庚", "辛", "申", "酉"]
+    }
+
+    # Peach Blossom (桃花) Mapping for Year / Day Branches
+    PEACH_BLOSSOM_MAP = {
+        "申": "酉", "子": "酉", "辰": "酉",
+        "寅": "卯", "午": "卯", "戌": "卯",
+        "巳": "午", "酉": "午", "丑": "午",
+        "亥": "子", "卯": "子", "未": "子"
+    }
+
     def _compute_wealth_score(self, dm: str, day_pillar: str) -> int:
-        # Earth stems / branches represent wealth storage
-        wealth_symbols = ["戊", "己", "辰", "戌", "丑", "未"]
+        """
+        Calculate wealth score according to Day Master element (我克者为妻财).
+        """
+        dm_clean = dm.strip()[0] if dm else "甲"
+        dm_elem = self.STEM_ELEMENT_MAP.get(dm_clean, "Wood")
+        wealth_symbols = self.WEALTH_SYMBOLS.get(dm_elem, self.WEALTH_SYMBOLS["Wood"])
         matches = sum(1 for s in wealth_symbols if s in day_pillar)
-        return min(95, 65 + (matches * 12))
+        
+        # Companion elements (比劫) can either assist or compete for wealth
+        companion_matches = 1 if dm_clean in day_pillar else 0
+        base = 65
+        score = base + (matches * 15) + (companion_matches * 5)
+        return max(40, min(96, score))
 
     def _compute_career_score(self, dm: str, day_pillar: str) -> int:
-        officer_symbols = ["甲", "丙", "庚", "壬", "申", "酉", "巳", "午"]
+        """
+        Calculate career and authority score according to Officer star (克我者为官杀).
+        """
+        dm_clean = dm.strip()[0] if dm else "甲"
+        dm_elem = self.STEM_ELEMENT_MAP.get(dm_clean, "Wood")
+        officer_symbols = self.OFFICER_SYMBOLS.get(dm_elem, self.OFFICER_SYMBOLS["Wood"])
         matches = sum(1 for s in officer_symbols if s in day_pillar)
-        return min(95, 60 + (matches * 10))
+        
+        # Resource elements (印星) support career advancement and official seals
+        resource_symbols = self.RESOURCE_SYMBOLS.get(dm_elem, self.RESOURCE_SYMBOLS["Wood"])
+        resource_matches = sum(1 for s in resource_symbols if s in day_pillar)
+        
+        base = 62
+        score = base + (matches * 14) + (resource_matches * 8)
+        return max(40, min(96, score))
 
-    def _compute_love_score(self, dm: str, day_pillar: str) -> int:
-        peach_blossom = ["子", "午", "卯", "酉"]
-        matches = sum(1 for s in peach_blossom if s in day_pillar)
-        return min(95, 65 + (matches * 14))
+    def _compute_love_score(self, dm: str, day_pillar: str, user_branch: str = "") -> int:
+        """
+        Calculate romance and peach blossom score using Day Master spouse star
+        and personalized Peach Blossom (Tao Hua 桃花).
+        """
+        dm_clean = dm.strip()[0] if dm else "甲"
+        dm_elem = self.STEM_ELEMENT_MAP.get(dm_clean, "Wood")
+        
+        # 1. Check for Peach Blossom branch
+        score = 65
+        if user_branch and user_branch in self.PEACH_BLOSSOM_MAP:
+            personal_tao_hua = self.PEACH_BLOSSOM_MAP[user_branch]
+            if personal_tao_hua in day_pillar:
+                score += 18
+        else:
+            # Cardinal Peach Blossom branches (子, 午, 卯, 酉)
+            cardinals = ["子", "午", "卯", "酉"]
+            matches = sum(1 for s in cardinals if s in day_pillar)
+            score += matches * 10
+
+        # 2. Check for Spouse Star (Wealth for Wood/Fire/Earth/Metal/Water or Officer)
+        wealth_symbols = self.WEALTH_SYMBOLS.get(dm_elem, [])
+        officer_symbols = self.OFFICER_SYMBOLS.get(dm_elem, [])
+        if any(s in day_pillar for s in wealth_symbols):
+            score += 8
+        if any(s in day_pillar for s in officer_symbols):
+            score += 8
+
+        return max(40, min(96, score))
 
     def _compute_health_score(self, dm: str, day_pillar: str) -> int:
-        vital_symbols = ["寅", "卯", "巳", "午", "亥", "子"]
-        matches = sum(1 for s in vital_symbols if s in day_pillar)
-        return min(95, 70 + (matches * 8))
+        """
+        Calculate health score based on Resource (印星) nurturing and elemental harmony.
+        """
+        dm_clean = dm.strip()[0] if dm else "甲"
+        dm_elem = self.STEM_ELEMENT_MAP.get(dm_clean, "Wood")
+        
+        resource_symbols = self.RESOURCE_SYMBOLS.get(dm_elem, self.RESOURCE_SYMBOLS["Wood"])
+        officer_symbols = self.OFFICER_SYMBOLS.get(dm_elem, self.OFFICER_SYMBOLS["Wood"])
+        
+        # Resource generates Day Master (healthy)
+        resource_matches = sum(1 for s in resource_symbols if s in day_pillar)
+        # Heavy Officer can exhaust or pressure Day Master
+        officer_matches = sum(1 for s in officer_symbols if s in day_pillar)
+        
+        base = 72
+        score = base + (resource_matches * 12) - (officer_matches * 6)
+        return max(45, min(96, score))
 
     def _score_to_level(self, score: int) -> str:
         if score >= 85: return "🌟 មហាលាភ (Very Auspicious)"

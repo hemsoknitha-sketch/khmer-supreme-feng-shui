@@ -96,6 +96,18 @@ class MahaSnehLoveEngine:
         idx = (birth_year - 1900) % 12
         return branches[idx]
 
+    def _get_solar_year(self, birth_date: str) -> int:
+        """Calculate solar year taking into account Li Chun (立春) via astronomical calculator."""
+        try:
+            parts = [int(p) for p in birth_date.strip().split("-")]
+            y = parts[0]
+            gua_res = self.calc.calculate_life_gua(birth_year=y, gender="male", birth_date=birth_date)
+            if gua_res.get("success"):
+                return gua_res["data"].get("solar_year", y)
+            return y
+        except Exception:
+            return 1990
+
     def analyze_love_profile(
         self,
         birth_date_1: str,
@@ -107,34 +119,35 @@ class MahaSnehLoveEngine:
         Perform 8-Pillars Universal Zenith Love & Peach Blossom Analysis.
         Supports single person love audit and couples BaZi compatibility.
         """
-        try:
-            dt1 = datetime.strptime(birth_date_1, "%Y-%m-%d")
-            year_1 = dt1.year
-        except Exception:
-            year_1 = 1990
-            birth_date_1 = "1990-01-01"
-
         bazi_1 = self.calc.calculate_bazi(birth_date_1, "12:00")
-        dm_1 = bazi_1.get("day_master", {})
-        element_1 = dm_1.get("element", "Water")
+        bazi_data_1 = bazi_1.get("data", {}) if bazi_1.get("success") else {}
+        dm_1 = bazi_data_1.get("day_master", {})
+        raw_element_1 = dm_1.get("element", "Water")
+        element_1 = "Water"
+        for k in ["Water", "Wood", "Fire", "Earth", "Metal"]:
+            if k.lower() in raw_element_1.lower():
+                element_1 = k
+                break
 
-        zodiac_1 = self.get_zodiac_branch(year_1)
+        solar_y1 = self._get_solar_year(birth_date_1)
+        zodiac_1 = self.get_zodiac_branch(solar_y1)
         peach_info = self.PEACH_BLOSSOM_MAP.get(zodiac_1, self.PEACH_BLOSSOM_MAP["Rat"])
         remedy_info = self.ELEMENT_REMEDY_MAP.get(element_1, self.ELEMENT_REMEDY_MAP["Water"])
 
         # Couples Analysis if Person 2 provided
         if birth_date_2:
-            try:
-                dt2 = datetime.strptime(birth_date_2, "%Y-%m-%d")
-                year_2 = dt2.year
-            except Exception:
-                year_2 = 1992
-                birth_date_2 = "1992-01-01"
-
             bazi_2 = self.calc.calculate_bazi(birth_date_2, "12:00")
-            dm_2 = bazi_2.get("day_master", {})
-            element_2 = dm_2.get("element", "Wood")
-            zodiac_2 = self.get_zodiac_branch(year_2)
+            bazi_data_2 = bazi_2.get("data", {}) if bazi_2.get("success") else {}
+            dm_2 = bazi_data_2.get("day_master", {})
+            raw_element_2 = dm_2.get("element", "Wood")
+            element_2 = "Wood"
+            for k in ["Water", "Wood", "Fire", "Earth", "Metal"]:
+                if k.lower() in raw_element_2.lower():
+                    element_2 = k
+                    break
+
+            solar_y2 = self._get_solar_year(birth_date_2)
+            zodiac_2 = self.get_zodiac_branch(solar_y2)
 
             # Compatibility Formula: Five Elements Producing/Controlling + Stems/Branches harmony
             compat_score = self._calculate_compatibility(element_1, element_2, zodiac_1, zodiac_2)

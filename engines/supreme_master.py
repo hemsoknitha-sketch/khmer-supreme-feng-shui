@@ -57,8 +57,7 @@ class SupremeFengShuiMaster:
         # 1. Classical Calculation Engine (FS-Classical-Calc-v1)
         if birth_date:
             try:
-                birth_year = int(birth_date.strip().split("-")[0])
-                gua_res = self.calc_engine.calculate_life_gua(birth_year, gender)
+                gua_res = self.calc_engine.calculate_life_gua(birth_year=1990, gender=gender, birth_date=birth_date)
                 bazi_res = self.calc_engine.calculate_bazi(birth_date, birth_time)
                 if gua_res.get("success"):
                     evidence_packet["life_gua"] = gua_res["data"]
@@ -67,16 +66,28 @@ class SupremeFengShuiMaster:
             except Exception as e:
                 logger.warning(f"Error parsing birth date for calculation: {e}")
 
-        # 2. 24 Mountains Calculation
+        # 2. 24 Mountains & House Flying Stars Chart (玄空九宫宅命盘)
+        from datetime import datetime
+        current_year = datetime.now().year
+
         if house_degree is not None:
             mountain_res = self.calc_engine.get_mountain_by_degree(house_degree)
             if mountain_res.get("success"):
                 evidence_packet["24_mountains"] = mountain_res["mountain"]
 
-        # 3. Flying Stars (Current Year Period 9)
-        flying_stars = self.calc_engine.calculate_flying_stars(2024)
+            # Calculate complete Xuan Kong Natal Chart for the property
+            house_chart = self.calc_engine.calculate_house_flying_stars(
+                facing_degree=house_degree,
+                year=current_year
+            )
+            if house_chart.get("success"):
+                evidence_packet["xuan_kong_house_natal_chart"] = house_chart["data"]
+
+        # 3. Annual Flying Stars (Current Year Period 9)
+        flying_stars = self.calc_engine.calculate_flying_stars(current_year)
         if flying_stars.get("success"):
-            evidence_packet["flying_stars_2024"] = flying_stars["data"]
+            evidence_packet[f"flying_stars_{current_year}"] = flying_stars["data"]
+            evidence_packet["flying_stars_current"] = flying_stars["data"]
 
         # 4. Fortune Prediction (FS-Alert-Predictor)
         if birth_date:
