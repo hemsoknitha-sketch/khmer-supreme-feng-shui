@@ -1375,7 +1375,7 @@ class FengShuiTelegramBot:
                 msg = (
                     f"🧭 **លទ្ធផល Life Gua (FS-Classical-Calc-v1)**\n"
                     f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-                    f"• **ឆ្នាំកំណើត:** {d['birth_year']} ({'បុរស' if d['gender'] == 'male' else 'ស្ត្រី'})\n"
+                    f"• **ឆ្នាំកំណើត:** {d['birth_year']} ({d.get('gender_kh', 'បុរស' if ('ប្រុស' in str(d.get('gender', '')) or d.get('gender_raw') == 'male') else 'ស្ត្រី')})\n"
                     f"{note_str}"
                     f"• **Gua លេខ:** {d['gua_number']} ({d['trigram_name']})\n"
                     f"• **ធាតុ:** {d['element']}\n"
@@ -3067,7 +3067,7 @@ class FengShuiTelegramBot:
                     msg = (
                         f"🧭 **លទ្ធផល Life Gua (FS-Classical-Calc-v1)**\n"
                         f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-                        f"• **ឆ្នាំកំណើត:** {d['birth_year']} ({'បុរស' if d['gender'] == 'male' else 'ស្ត្រី'})\n"
+                        f"• **ឆ្នាំកំណើត:** {d['birth_year']} ({d.get('gender_kh', 'បុរស' if ('ប្រុស' in str(d.get('gender', '')) or d.get('gender_raw') == 'male') else 'ស្ត្រី')})\n"
                         f"• **Gua លេខ:** {d['gua_number']} ({d['trigram_name']})\n"
                         f"• **ធាតុ:** {d['element']}\n"
                         f"• **ក្រុម:** {d['group']}\n\n"
@@ -3094,7 +3094,7 @@ class FengShuiTelegramBot:
                     msg = (
                         f"🧭 **លទ្ធផល Life Gua (FS-Classical-Calc-v1)**\n"
                         f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-                        f"• **ឆ្នាំកំណើត:** {d['birth_year']} ({'បុរស' if d['gender'] == 'male' else 'ស្ត្រី'})\n"
+                        f"• **ឆ្នាំកំណើត:** {d['birth_year']} ({d.get('gender_kh', 'បុរស' if ('ប្រុស' in str(d.get('gender', '')) or d.get('gender_raw') == 'male') else 'ស្ត្រី')})\n"
                         f"• **Gua លេខ:** {d['gua_number']} ({d['trigram_name']})\n"
                         f"• **ធាតុ:** {d['element']}\n"
                         f"• **ក្រុម:** {d['group']}\n\n"
